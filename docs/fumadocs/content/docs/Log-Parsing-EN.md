@@ -347,16 +347,25 @@ Prebuilt binaries:
 - `prebuilt/nginxpulse-agent-linux-amd64`
 
 2) Create agent config on the log server (fill in parsing server and `websiteID`).
-   - Fetch `websiteID` from the parsing server:
+   - Fetch `websiteID` from the parsing server (you can pick multiple for multi-site):
      `curl http://<nginxpulse-server>:8089/api/websites`
      The `id` field is the `websiteID`.
 ```json
 {
   "server": "http://<nginxpulse-server>:8089",
   "accessKey": "your-key",
-  "websiteID": "abcd",
-  "sourceID": "agent-main",
-  "paths": ["/var/log/nginx/access.log"],
+  "routes": [
+    {
+      "websiteID": "abcd",
+      "sourceID": "agent-main",
+      "paths": ["/var/log/nginx/main-access.log"]
+    },
+    {
+      "websiteID": "ef01",
+      "sourceID": "agent-blog",
+      "paths": ["/var/log/nginx/blog-access.log"]
+    }
+  ],
   "pollInterval": "1s",
   "batchSize": 200,
   "flushInterval": "2s"
@@ -371,6 +380,8 @@ Prebuilt binaries:
 Notes:
 - The log server must reach `http://<nginxpulse-server>:8089/api/ingest/logs`.
 - To override parsing, set a `type=agent` source with `id=sourceID` and fill `parse`.
+- If `routes` is empty, legacy fields `websiteID` / `sourceID` / `paths` still work (single-site mode).
+- Each route should use different log file paths; duplicated paths across routes are rejected to avoid duplicate ingestion.
 - The agent skips `.gz` files; if a log file shrinks (rotation), it restarts from the beginning.
 
 ## Notes

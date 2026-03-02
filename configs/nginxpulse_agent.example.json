@@ -6,17 +6,31 @@
   // 可选：如果 server 侧启用了 access key，则填这里
   "accessKey": "",
 
-  // 必填：站点 ID（对应 nginxpulse 的网站配置/后台生成的 ID）
-  "websiteID": "1207",
-
-  // 可选：来源 ID（建议填，便于区分不同 agent）
-  "sourceID": "agent-ingress",
-
-  // 必填：要采集的日志文件路径列表（容器内路径）
-  // 说明：当前 agent 会跳过 .gz 文件
-  "paths": [
-    "/data/nginxpulse/ingress-json.log"
+  // 推荐：多路由配置（可一进程采集多个站点）
+  // 每个 route 独立 website/source/paths，且各 route 不允许复用同一路径（避免重复采集）
+  "routes": [
+    {
+      "websiteID": "1207",
+      "sourceID": "agent-ingress-main",
+      "paths": [
+        "/data/nginxpulse/ingress-main.log"
+      ]
+    },
+    {
+      "websiteID": "9f32",
+      "sourceID": "agent-ingress-blog",
+      "paths": [
+        "/data/nginxpulse/ingress-blog.log"
+      ]
+    }
   ],
+
+  // 兼容模式（旧配置）：
+  // - 当 routes 为空时，仍使用以下 websiteID/sourceID/paths
+  // - 当 routes 已配置时，以下字段会被忽略
+  "websiteID": "1207",
+  "sourceID": "agent-ingress",
+  "paths": ["/data/nginxpulse/ingress-json.log"],
 
   // 轮询间隔：多久读一次“新增内容”
   "pollInterval": "20s",

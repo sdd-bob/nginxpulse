@@ -20,14 +20,15 @@ import (
 )
 
 type agentConfig struct {
-	Server        string   `json:"server"`
-	AccessKey     string   `json:"accessKey"`
-	WebsiteID     string   `json:"websiteID"`
-	SourceID      string   `json:"sourceID"`
-	Paths         []string `json:"paths"`
-	PollInterval  string   `json:"pollInterval"`
-	BatchSize     int      `json:"batchSize"`
-	FlushInterval string   `json:"flushInterval"`
+	Server        string       `json:"server"`
+	AccessKey     string       `json:"accessKey"`
+	WebsiteID     string       `json:"websiteID"`
+	SourceID      string       `json:"sourceID"`
+	Paths         []string     `json:"paths"`
+	Routes        []agentRoute `json:"routes"`
+	PollInterval  string       `json:"pollInterval"`
+	BatchSize     int          `json:"batchSize"`
+	FlushInterval string       `json:"flushInterval"`
 	// InitialTailBytes：首次读取某个文件时（offset=0），如果文件很大，则只从文件尾部读取最近 N 字节。
 	// 目的：避免 agent 第一次启动就把历史日志全量推送，导致 server/pgsql 被打爆。
 	// 约定：
@@ -55,6 +56,19 @@ type agentConfig struct {
 	ExitOnMaxBackoff bool `json:"exitOnMaxBackoff"`
 }
 
+type agentRoute struct {
+	WebsiteID string   `json:"websiteID"`
+	SourceID  string   `json:"sourceID"`
+	Paths     []string `json:"paths"`
+}
+
+type resolvedRoute struct {
+	id        string
+	websiteID string
+	sourceID  string
+	paths     []string
+}
+
 type ingestRequest struct {
 	WebsiteID string   `json:"website_id"`
 	SourceID  string   `json:"source_id"`
@@ -68,15 +82,28 @@ type fileState struct {
 }
 
 type readStats struct {
-	path      string
-	from      int64
-	to        int64
-	fileSize  int64
-	lines     int
-	bytes     int64
-	hasPartial bool
+	path         string
+	from         int64
+	to           int64
+	fileSize     int64
+	lines        int
+	bytes        int64
+	hasPartial   bool
 	skippedLines int
 	maxLineBytes int
+}
+
+type routeRuntime struct {
+	route                  resolvedRoute
+	states                 map[string]*fileState
+	pending                []string
+	nextPushAt             time.Time
+	failures               int
+	reachedMax             bool
+	lastErrLogged          time.Time
+	lastReadLogged         time.Time
+	lastPushLogged         time.Time
+	lastBackpressureLogged time.Time
 }
 
 func main() {
@@ -89,6 +116,11 @@ func main() {
 		os.Exit(1)
 	}
 	applyEnvOverrides(cfg)
+	routes, err := resolveRoutes(cfg)
+	if err != nil {
+		logrus.WithError(err).Error("解析 agent routes 失败")
+		os.Exit(1)
+	}
 
 	pollInterval := parseDuration(cfg.PollInterval, time.Second)
 	flushInterval := parseDuration(cfg.FlushInterval, 2*time.Second)
@@ -126,24 +158,19 @@ func main() {
 	if initialMaxLines < 0 {
 		initialMaxLines = 0
 	}
-	sourceID := strings.TrimSpace(cfg.SourceID)
-	if sourceID == "" {
-		sourceID = "agent"
-	}
 
 	endpoint := strings.TrimRight(cfg.Server, "/") + "/api/ingest/logs"
-	states := make(map[string]*fileState)
-	pending := make([]string, 0, batchSize)
-	var (
-		nextPushAt    time.Time
-		failures      int
-		reachedMax    bool
-		lastErrLogged time.Time
-		lastMemLogged time.Time
-		lastReadLogged time.Time
-		lastPushLogged time.Time
-		lastBackpressureLogged time.Time
-	)
+	runtimes := make([]*routeRuntime, 0, len(routes))
+	routeIDs := make([]string, 0, len(routes))
+	for _, route := range routes {
+		runtimes = append(runtimes, &routeRuntime{
+			route:   route,
+			states:  make(map[string]*fileState),
+			pending: make([]string, 0, batchSize),
+		})
+		routeIDs = append(routeIDs, route.id)
+	}
+	var lastMemLogged time.Time
 	// 用于比较的“有效最大退避时间”（computeBackoff 在 max<=0 时会使用默认值）。
 	effectiveBackoffMax := backoffMax
 	if effectiveBackoffMax <= 0 {
@@ -151,21 +178,20 @@ func main() {
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"endpoint":              endpoint,
-		"poll_interval":         pollInterval.String(),
-		"flush_interval":        flushInterval.String(),
-		"batch_size":            batchSize,
-		"max_pending_lines":     maxPending,
-		"max_line_bytes":        maxLineBytes,
-		"initial_tail_bytes":    initialTailBytes,
-		"initial_max_lines":     initialMaxLines,
-		"request_timeout":       requestTimeout.String(),
-		"retry_backoff_min":     backoffMin.String(),
-		"retry_backoff_max":     effectiveBackoffMax.String(),
-		"exit_on_max_backoff":   cfg.ExitOnMaxBackoff,
-		"paths":                 cfg.Paths,
-		"website_id":            cfg.WebsiteID,
-		"source_id":             sourceID,
+		"endpoint":            endpoint,
+		"poll_interval":       pollInterval.String(),
+		"flush_interval":      flushInterval.String(),
+		"batch_size":          batchSize,
+		"max_pending_lines":   maxPending,
+		"max_line_bytes":      maxLineBytes,
+		"initial_tail_bytes":  initialTailBytes,
+		"initial_max_lines":   initialMaxLines,
+		"request_timeout":     requestTimeout.String(),
+		"retry_backoff_min":   backoffMin.String(),
+		"retry_backoff_max":   effectiveBackoffMax.String(),
+		"exit_on_max_backoff": cfg.ExitOnMaxBackoff,
+		"route_count":         len(runtimes),
+		"routes":              routeIDs,
 	}).Info("nginxpulse-agent: config loaded")
 
 	pollTicker := time.NewTicker(pollInterval)
@@ -176,162 +202,105 @@ func main() {
 	for {
 		select {
 		case <-pollTicker.C:
-			// 背压：如果 pending 积压过大，则暂停读取，直到成功推送一部分数据。
-			if len(pending) >= maxPending {
-				if time.Since(lastBackpressureLogged) > 10*time.Second {
-					lastBackpressureLogged = time.Now()
-					logrus.WithFields(logrus.Fields{
-						"pending_lines":      len(pending),
-						"max_pending_lines":  maxPending,
-						"failures":           failures,
-						"next_push_in":       durationUntil(nextPushAt).Truncate(time.Millisecond).String(),
-					}).Warn("pending buffer is full; pausing reads")
-				}
-				continue
-			}
-			for _, path := range cfg.Paths {
-				if len(pending) >= maxPending {
-					break
-				}
-				if strings.HasSuffix(strings.ToLower(path), ".gz") {
+			for _, rt := range runtimes {
+				// 背压：如果某条 route 的 pending 积压过大，则暂停该 route 读取，直到成功推送一部分数据。
+				if len(rt.pending) >= maxPending {
+					if time.Since(rt.lastBackpressureLogged) > 10*time.Second {
+						rt.lastBackpressureLogged = time.Now()
+						logrus.WithFields(logrus.Fields{
+							"route":             rt.route.id,
+							"pending_lines":     len(rt.pending),
+							"max_pending_lines": maxPending,
+							"failures":          rt.failures,
+							"next_push_in":      durationUntil(rt.nextPushAt).Truncate(time.Millisecond).String(),
+						}).Warn("pending buffer is full; pausing reads")
+					}
 					continue
 				}
-				state := states[path]
-				if state == nil {
-					state = &fileState{}
-					states[path] = state
-				}
-				// 读取限流：避免一次性读出海量行导致内存暴涨/推送洪峰。
-				remaining := maxPending - len(pending)
-				if remaining <= 0 {
-					break
-				}
-				lines, st, err := readNewLines(path, state, maxLineBytes, remaining, initialTailBytes, initialMaxLines)
-				if err != nil {
-					logrus.WithError(err).Warnf("读取日志失败: %s", path)
-					continue
-				}
-				if st.lines == 0 {
-					continue
-				}
-				// 大读取/周期性摘要日志：用于辅助定位 OOM 与积压问题。
-				if st.lines >= batchSize || st.bytes >= 4*1024*1024 || time.Since(lastReadLogged) > 30*time.Second {
-					lastReadLogged = time.Now()
-					logrus.WithFields(logrus.Fields{
-						"path":          st.path,
-						"lines":         st.lines,
-						"skipped_lines": st.skippedLines,
-						"max_line_bytes": st.maxLineBytes,
-						"bytes":         formatBytes(st.bytes),
-						"file_size":     formatBytes(st.fileSize),
-						"offset_from":   st.from,
-						"offset_to":     st.to,
-						"offset_delta":  st.to - st.from,
-						"has_partial":   st.hasPartial,
-						"pending_lines": len(pending),
-					}).Info("read new lines")
-				}
-				pending = append(pending, lines...)
-				if len(pending) >= batchSize {
-					// 遵守退避窗口：在 backoff 时间内不进行推送尝试。
-					if !nextPushAt.IsZero() && time.Now().Before(nextPushAt) {
+				for _, path := range rt.route.paths {
+					if len(rt.pending) >= maxPending {
+						break
+					}
+					if strings.HasSuffix(strings.ToLower(path), ".gz") {
 						continue
 					}
-					if err := pushLines(requestTimeout, endpoint, cfg.AccessKey, cfg.WebsiteID, sourceID, pending); err != nil {
-						failures++
-						delay := computeBackoff(failures, backoffMin, backoffMax)
-						// 如果此前已达到最大退避，并且等待后依然失败，则按配置可选择直接退出进程。
-						if cfg.ExitOnMaxBackoff && reachedMax && delay >= effectiveBackoffMax {
-							logrus.WithError(err).Errorf("日志推送连续失败且退避已达上限 %s，终止 agent 进程", effectiveBackoffMax)
+					state := rt.states[path]
+					if state == nil {
+						state = &fileState{}
+						rt.states[path] = state
+					}
+					// 读取限流：避免一次性读出海量行导致内存暴涨/推送洪峰。
+					remaining := maxPending - len(rt.pending)
+					if remaining <= 0 {
+						break
+					}
+					lines, st, err := readNewLines(path, state, maxLineBytes, remaining, initialTailBytes, initialMaxLines)
+					if err != nil {
+						logrus.WithError(err).WithField("route", rt.route.id).Warnf("读取日志失败: %s", path)
+						continue
+					}
+					if st.lines == 0 {
+						continue
+					}
+					// 大读取/周期性摘要日志：用于辅助定位 OOM 与积压问题。
+					if st.lines >= batchSize || st.bytes >= 4*1024*1024 || time.Since(rt.lastReadLogged) > 30*time.Second {
+						rt.lastReadLogged = time.Now()
+						logrus.WithFields(logrus.Fields{
+							"route":          rt.route.id,
+							"path":           st.path,
+							"lines":          st.lines,
+							"skipped_lines":  st.skippedLines,
+							"max_line_bytes": st.maxLineBytes,
+							"bytes":          formatBytes(st.bytes),
+							"file_size":      formatBytes(st.fileSize),
+							"offset_from":    st.from,
+							"offset_to":      st.to,
+							"offset_delta":   st.to - st.from,
+							"has_partial":    st.hasPartial,
+							"pending_lines":  len(rt.pending),
+						}).Info("read new lines")
+					}
+					rt.pending = append(rt.pending, lines...)
+					if len(rt.pending) >= batchSize {
+						if err := tryPushRoute(rt, requestTimeout, endpoint, cfg.AccessKey, batchSize, maxPending, backoffMin, backoffMax, effectiveBackoffMax, cfg.ExitOnMaxBackoff, "batch_size"); err != nil {
 							os.Exit(1)
 						}
-						nextPushAt = time.Now().Add(delay)
-						reachedMax = delay >= effectiveBackoffMax
-						// 避免刷屏：最多每 5 秒打印一次 warning。
-						if time.Since(lastErrLogged) > 5*time.Second {
-							lastErrLogged = time.Now()
-							logrus.WithError(err).Warnf("日志推送失败，将在 %s 后重试", time.Until(nextPushAt).Truncate(time.Millisecond))
-							logrus.WithFields(logrus.Fields{
-								"pending_lines":      len(pending),
-								"batch_size":         batchSize,
-								"failures":           failures,
-								"backoff_next":       delay.String(),
-								"backoff_max":        effectiveBackoffMax.String(),
-								"reached_max_backoff": reachedMax,
-							}).Warn("push failed (debug)")
-						}
-						continue
 					}
-					// 成功后：周期性打印推送摘要，方便观测吞吐与 pending 容量变化。
-					if time.Since(lastPushLogged) > 30*time.Second || failures > 0 {
-						lastPushLogged = time.Now()
-						logrus.WithFields(logrus.Fields{
-							"pushed_lines":     len(pending),
-							"pending_lines":    len(pending),
-							"pending_cap":      cap(pending),
-							"failures_reset":   failures,
-						}).Info("push succeeded")
-					}
-					pending = resetPending(pending, batchSize, maxPending)
-					failures = 0
-					reachedMax = false
-					nextPushAt = time.Time{}
 				}
 			}
 			// 周期性内存统计：用于与 OOMKilled 时间点对齐分析。
 			if time.Since(lastMemLogged) > 30*time.Second {
 				lastMemLogged = time.Now()
+				totalPending := 0
+				blockedRoutes := 0
+				activeFailures := 0
+				for _, rt := range runtimes {
+					totalPending += len(rt.pending)
+					if len(rt.pending) >= maxPending {
+						blockedRoutes++
+					}
+					if rt.failures > 0 {
+						activeFailures++
+					}
+				}
 				logMemStats("mem")
 				logrus.WithFields(logrus.Fields{
-					"pending_lines":     len(pending),
-					"batch_size":        batchSize,
-					"max_pending_lines": maxPending,
-					"failures":          failures,
-					"next_push_in":      durationUntil(nextPushAt).Truncate(time.Millisecond).String(),
+					"route_count":                 len(runtimes),
+					"total_pending_lines":         totalPending,
+					"max_pending_lines_per_route": maxPending,
+					"blocked_routes":              blockedRoutes,
+					"routes_with_failures":        activeFailures,
 				}).Info("agent status")
 			}
 		case <-flushTicker.C:
-			if len(pending) == 0 {
-				continue
-			}
-			if !nextPushAt.IsZero() && time.Now().Before(nextPushAt) {
-				continue
-			}
-			if err := pushLines(requestTimeout, endpoint, cfg.AccessKey, cfg.WebsiteID, sourceID, pending); err != nil {
-				failures++
-				delay := computeBackoff(failures, backoffMin, backoffMax)
-				if cfg.ExitOnMaxBackoff && reachedMax && delay >= effectiveBackoffMax {
-					logrus.WithError(err).Errorf("日志推送连续失败且退避已达上限 %s，终止 agent 进程", effectiveBackoffMax)
+			for _, rt := range runtimes {
+				if len(rt.pending) == 0 {
+					continue
+				}
+				if err := tryPushRoute(rt, requestTimeout, endpoint, cfg.AccessKey, batchSize, maxPending, backoffMin, backoffMax, effectiveBackoffMax, cfg.ExitOnMaxBackoff, "flush_interval"); err != nil {
 					os.Exit(1)
 				}
-				nextPushAt = time.Now().Add(delay)
-				reachedMax = delay >= effectiveBackoffMax
-				if time.Since(lastErrLogged) > 5*time.Second {
-					lastErrLogged = time.Now()
-					logrus.WithError(err).Warnf("日志推送失败，将在 %s 后重试", time.Until(nextPushAt).Truncate(time.Millisecond))
-					logrus.WithFields(logrus.Fields{
-						"pending_lines":      len(pending),
-						"batch_size":         batchSize,
-						"failures":           failures,
-						"backoff_next":       delay.String(),
-						"backoff_max":        effectiveBackoffMax.String(),
-						"reached_max_backoff": reachedMax,
-					}).Warn("push failed on flush tick (debug)")
-				}
-				continue
 			}
-			if time.Since(lastPushLogged) > 30*time.Second || failures > 0 {
-				lastPushLogged = time.Now()
-				logrus.WithFields(logrus.Fields{
-					"pushed_lines":   len(pending),
-					"pending_cap":    cap(pending),
-					"trigger":        "flush_interval",
-				}).Info("push succeeded")
-			}
-			pending = resetPending(pending, batchSize, maxPending)
-			failures = 0
-			reachedMax = false
-			nextPushAt = time.Time{}
 		}
 	}
 }
@@ -354,13 +323,157 @@ func loadConfig(path string) (*agentConfig, error) {
 	if strings.TrimSpace(cfg.Server) == "" {
 		return nil, errors.New("server 不能为空")
 	}
-	if strings.TrimSpace(cfg.WebsiteID) == "" {
-		return nil, errors.New("websiteID 不能为空")
-	}
-	if len(cfg.Paths) == 0 {
-		return nil, errors.New("paths 不能为空")
+	if len(cfg.Routes) == 0 {
+		if strings.TrimSpace(cfg.WebsiteID) == "" {
+			return nil, errors.New("websiteID 不能为空")
+		}
+		if len(cfg.Paths) == 0 {
+			return nil, errors.New("paths 不能为空")
+		}
 	}
 	return cfg, nil
+}
+
+func resolveRoutes(cfg *agentConfig) ([]resolvedRoute, error) {
+	if cfg == nil {
+		return nil, errors.New("cfg 不能为空")
+	}
+
+	defaultSourceID := strings.TrimSpace(cfg.SourceID)
+	if defaultSourceID == "" {
+		defaultSourceID = "agent"
+	}
+
+	inputRoutes := cfg.Routes
+	if len(inputRoutes) == 0 {
+		inputRoutes = []agentRoute{{
+			WebsiteID: cfg.WebsiteID,
+			SourceID:  cfg.SourceID,
+			Paths:     cfg.Paths,
+		}}
+	} else if strings.TrimSpace(cfg.WebsiteID) != "" || len(cfg.Paths) > 0 {
+		logrus.Warn("routes 已配置，顶层 websiteID/sourceID/paths 将被忽略")
+	}
+
+	resolved := make([]resolvedRoute, 0, len(inputRoutes))
+	routeSeen := make(map[string]struct{}, len(inputRoutes))
+	pathSeen := make(map[string]string)
+
+	for i, route := range inputRoutes {
+		websiteID := strings.TrimSpace(route.WebsiteID)
+		if websiteID == "" {
+			return nil, fmt.Errorf("routes[%d].websiteID 不能为空", i)
+		}
+		sourceID := strings.TrimSpace(route.SourceID)
+		if sourceID == "" {
+			sourceID = defaultSourceID
+		}
+		if sourceID == "" {
+			sourceID = "agent"
+		}
+		routeID := websiteID + ":" + sourceID
+		if _, ok := routeSeen[routeID]; ok {
+			return nil, fmt.Errorf("routes[%d] 与其他 route 重复: %s", i, routeID)
+		}
+		routeSeen[routeID] = struct{}{}
+
+		paths := make([]string, 0, len(route.Paths))
+		routePathSeen := make(map[string]struct{}, len(route.Paths))
+		for _, rawPath := range route.Paths {
+			path := strings.TrimSpace(rawPath)
+			if path == "" {
+				continue
+			}
+			if _, ok := routePathSeen[path]; ok {
+				return nil, fmt.Errorf("routes[%d].paths 存在重复路径: %s", i, path)
+			}
+			routePathSeen[path] = struct{}{}
+			if ownerRoute, ok := pathSeen[path]; ok {
+				return nil, fmt.Errorf("路径 %s 同时出现在 route %s 和 %s；为避免重复采集请拆分", path, ownerRoute, routeID)
+			}
+			pathSeen[path] = routeID
+			paths = append(paths, path)
+		}
+		if len(paths) == 0 {
+			return nil, fmt.Errorf("routes[%d].paths 不能为空", i)
+		}
+
+		resolved = append(resolved, resolvedRoute{
+			id:        routeID,
+			websiteID: websiteID,
+			sourceID:  sourceID,
+			paths:     paths,
+		})
+	}
+
+	return resolved, nil
+}
+
+func tryPushRoute(
+	rt *routeRuntime,
+	requestTimeout time.Duration,
+	endpoint, accessKey string,
+	batchSize, maxPending int,
+	backoffMin, backoffMax, effectiveBackoffMax time.Duration,
+	exitOnMaxBackoff bool,
+	trigger string,
+) error {
+	if rt == nil || len(rt.pending) == 0 {
+		return nil
+	}
+	if !rt.nextPushAt.IsZero() && time.Now().Before(rt.nextPushAt) {
+		return nil
+	}
+
+	if err := pushLines(requestTimeout, endpoint, accessKey, rt.route.websiteID, rt.route.sourceID, rt.pending); err != nil {
+		rt.failures++
+		delay := computeBackoff(rt.failures, backoffMin, backoffMax)
+		if exitOnMaxBackoff && rt.reachedMax && delay >= effectiveBackoffMax {
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"route":         rt.route.id,
+				"pending_lines": len(rt.pending),
+				"backoff_max":   effectiveBackoffMax.String(),
+				"failures":      rt.failures,
+				"trigger":       trigger,
+			}).Error("日志推送连续失败且退避已达上限，终止 agent 进程")
+			return err
+		}
+		rt.nextPushAt = time.Now().Add(delay)
+		rt.reachedMax = delay >= effectiveBackoffMax
+		if time.Since(rt.lastErrLogged) > 5*time.Second {
+			rt.lastErrLogged = time.Now()
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"route":               rt.route.id,
+				"pending_lines":       len(rt.pending),
+				"batch_size":          batchSize,
+				"failures":            rt.failures,
+				"backoff_next":        delay.String(),
+				"backoff_max":         effectiveBackoffMax.String(),
+				"reached_max_backoff": rt.reachedMax,
+				"next_push_in":        durationUntil(rt.nextPushAt).Truncate(time.Millisecond).String(),
+				"trigger":             trigger,
+			}).Warn("日志推送失败，将按退避重试")
+		}
+		return nil
+	}
+
+	wasFailures := rt.failures
+	pushedLines := len(rt.pending)
+	if time.Since(rt.lastPushLogged) > 30*time.Second || wasFailures > 0 {
+		rt.lastPushLogged = time.Now()
+		logrus.WithFields(logrus.Fields{
+			"route":          rt.route.id,
+			"pushed_lines":   pushedLines,
+			"pending_cap":    cap(rt.pending),
+			"failures_reset": wasFailures,
+			"trigger":        trigger,
+		}).Info("push succeeded")
+	}
+	rt.pending = resetPending(rt.pending, batchSize, maxPending)
+	rt.failures = 0
+	rt.reachedMax = false
+	rt.nextPushAt = time.Time{}
+	return nil
 }
 
 func readNewLines(path string, state *fileState, maxLineBytes int, maxLines int, initialTailBytes int64, initialMaxLines int) ([]string, readStats, error) {

@@ -349,16 +349,25 @@ go build -o bin/nginxpulse-agent ./cmd/nginxpulse-agent
 - `prebuilt/nginxpulse-agent-linux-amd64`
 
 2) 在日志服务器上创建配置文件（填写解析服务器地址与 `websiteID`）。
-   - `websiteID` 在解析服务器上通过接口获取：
+   - `websiteID` 在解析服务器上通过接口获取（支持多站点时可取多个）：
      `curl http://<nginxpulse-server>:8089/api/websites`
      返回的 `id` 字段就是 `websiteID`。
 ```json
 {
   "server": "http://<nginxpulse-server>:8089",
   "accessKey": "your-key",
-  "websiteID": "abcd",
-  "sourceID": "agent-main",
-  "paths": ["/var/log/nginx/access.log"],
+  "routes": [
+    {
+      "websiteID": "abcd",
+      "sourceID": "agent-main",
+      "paths": ["/var/log/nginx/main-access.log"]
+    },
+    {
+      "websiteID": "ef01",
+      "sourceID": "agent-blog",
+      "paths": ["/var/log/nginx/blog-access.log"]
+    }
+  ],
   "pollInterval": "1s",
   "batchSize": 200,
   "flushInterval": "2s"
@@ -373,6 +382,8 @@ go build -o bin/nginxpulse-agent ./cmd/nginxpulse-agent
 注意事项：
 - 日志服务器需要能访问解析服务器的 `http://<nginxpulse-server>:8089/api/ingest/logs`。
 - 如需为 agent 指定解析格式，可在 `sources` 内配置 `type=agent` 且 `id=sourceID`，并填写 `parse` 覆盖。
+- `routes` 为空时，仍兼容旧字段 `websiteID` / `sourceID` / `paths`（单站点模式）。
+- 每个 route 应使用不同日志路径；同一路径重复配置会被拒绝，避免重复采集。
 - agent 会跳过 `.gz` 文件；日志轮转导致文件变小会自动从头开始读取。
 
 ## 常见注意点
