@@ -10,29 +10,30 @@ import (
 )
 
 const (
-	envConfigJSON        = "CONFIG_JSON"
-	envWebsites          = "WEBSITES"
-	envLogDestination    = "LOG_DEST"
-	envTaskInterval      = "TASK_INTERVAL"
-	envHTTPSourceTimeout = "HTTP_SOURCE_TIMEOUT"
-	envLogRetentionDays  = "LOG_RETENTION_DAYS"
-	envLogParseBatchSize = "LOG_PARSE_BATCH_SIZE"
-	envServerPort        = "SERVER_PORT"
-	envPVStatusCodes     = "PV_STATUS_CODES"
-	envPVExcludePatterns = "PV_EXCLUDE_PATTERNS"
-	envPVExcludeIPs      = "PV_EXCLUDE_IPS"
-	envDemoMode          = "DEMO_MODE"
-	envAccessKeys        = "ACCESS_KEYS"
-	envLanguage          = "APP_LANGUAGE"
-	envWebBasePath       = "WEB_BASE_PATH"
-	envMobilePWAEnabled  = "MOBILE_PWA_ENABLED"
-	envIPGeoCacheLimit   = "IP_GEO_CACHE_LIMIT"
-	envIPGeoAPIURL       = "IP_GEO_API_URL"
-	envDBDriver          = "DB_DRIVER"
-	envDBDSN             = "DB_DSN"
-	envDBMaxOpenConns    = "DB_MAX_OPEN_CONNS"
-	envDBMaxIdleConns    = "DB_MAX_IDLE_CONNS"
-	envDBConnMaxLifetime = "DB_CONN_MAX_LIFETIME"
+	envConfigJSON          = "CONFIG_JSON"
+	envWebsites            = "WEBSITES"
+	envLogDestination      = "LOG_DEST"
+	envTaskInterval        = "TASK_INTERVAL"
+	envHTTPSourceTimeout   = "HTTP_SOURCE_TIMEOUT"
+	envLogRetentionDays    = "LOG_RETENTION_DAYS"
+	envLogParseBatchSize   = "LOG_PARSE_BATCH_SIZE"
+	envServerPort          = "SERVER_PORT"
+	envPVStatusCodes       = "PV_STATUS_CODES"
+	envPVExcludePatterns   = "PV_EXCLUDE_PATTERNS"
+	envPVExcludeIPs        = "PV_EXCLUDE_IPS"
+	envDemoMode            = "DEMO_MODE"
+	envAccessKeys          = "ACCESS_KEYS"
+	envAccessKeyExpireDays = "ACCESS_KEY_EXPIRE_DAYS"
+	envLanguage            = "APP_LANGUAGE"
+	envWebBasePath         = "WEB_BASE_PATH"
+	envMobilePWAEnabled    = "MOBILE_PWA_ENABLED"
+	envIPGeoCacheLimit     = "IP_GEO_CACHE_LIMIT"
+	envIPGeoAPIURL         = "IP_GEO_API_URL"
+	envDBDriver            = "DB_DRIVER"
+	envDBDSN               = "DB_DSN"
+	envDBMaxOpenConns      = "DB_MAX_OPEN_CONNS"
+	envDBMaxIdleConns      = "DB_MAX_IDLE_CONNS"
+	envDBConnMaxLifetime   = "DB_CONN_MAX_LIFETIME"
 )
 
 var (
@@ -51,17 +52,18 @@ var (
 		"atom.xml$",
 	}
 	defaultSystem = SystemConfig{
-		LogDestination:    "file",
-		TaskInterval:      "1m",
-		HTTPSourceTimeout: "2m",
-		LogRetentionDays:  30,
-		ParseBatchSize:    100,
-		IPGeoCacheLimit:   1000000,
-		IPGeoAPIURL:       DefaultIPGeoAPIURL,
-		DemoMode:          false,
-		AccessKeys:        nil,
-		Language:          "zh-CN",
-		MobilePWAEnabled:  false,
+		LogDestination:      "file",
+		TaskInterval:        "1m",
+		HTTPSourceTimeout:   "2m",
+		LogRetentionDays:    30,
+		ParseBatchSize:      100,
+		IPGeoCacheLimit:     1000000,
+		IPGeoAPIURL:         DefaultIPGeoAPIURL,
+		DemoMode:            false,
+		AccessKeys:          nil,
+		AccessKeyExpireDays: 7,
+		Language:            "zh-CN",
+		MobilePWAEnabled:    false,
 	}
 	defaultServer = ServerConfig{
 		Port: ":8089",
@@ -214,6 +216,16 @@ func applyEnvOverrides(cfg *Config) error {
 		}
 		cfg.System.AccessKeys = values
 	}
+	if raw, key := getEnvValue(envAccessKeyExpireDays); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return fmt.Errorf("解析 %s 失败: %w", key, err)
+		}
+		if parsed <= 0 {
+			return fmt.Errorf("%s 必须大于0", key)
+		}
+		cfg.System.AccessKeyExpireDays = parsed
+	}
 
 	if raw, _ := getEnvValue(envLanguage); raw != "" {
 		cfg.System.Language = raw
@@ -319,6 +331,9 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.System.IPGeoAPIURL == "" {
 		cfg.System.IPGeoAPIURL = defaultSystem.IPGeoAPIURL
+	}
+	if cfg.System.AccessKeyExpireDays <= 0 {
+		cfg.System.AccessKeyExpireDays = defaultSystem.AccessKeyExpireDays
 	}
 	if cfg.System.Language == "" {
 		cfg.System.Language = defaultSystem.Language

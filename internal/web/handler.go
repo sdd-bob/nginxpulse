@@ -66,6 +66,7 @@ func SetupRoutes(
 			"ip_geo_progress":                         ingest.GetIPGeoParsingProgress(ipGeoPendingCount),
 			"ip_geo_estimated_remaining_seconds":      ingest.GetIPGeoEstimatedRemainingSeconds(ipGeoPendingCount),
 			"demo_mode":                               cfg.System.DemoMode,
+			"access_key_expire_days":                  cfg.System.AccessKeyExpireDays,
 			"mobile_pwa_enabled":                      cfg.System.MobilePWAEnabled,
 			"language":                                config.NormalizeLanguage(cfg.System.Language),
 			"version":                                 version.Version,

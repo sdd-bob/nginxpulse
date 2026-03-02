@@ -18,6 +18,7 @@ export interface AppStatusResponse {
   ip_geo_progress?: number;
   ip_geo_estimated_remaining_seconds?: number;
   demo_mode?: boolean;
+  access_key_expire_days?: number;
   mobile_pwa_enabled?: boolean;
   language?: string;
   version?: string;
@@ -59,6 +60,7 @@ export interface SystemConfig {
   ipGeoCacheLimit?: number;
   demoMode?: boolean;
   accessKeys?: string[];
+  accessKeyExpireDays?: number;
   language?: string;
   webBasePath?: string;
   mobilePwaEnabled?: boolean;

@@ -266,6 +266,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } f
 import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { fetchAppStatus } from '@/api';
+import { ACCESS_KEY_STORAGE, saveAccessKey, setAccessKeyExpireDays } from '@/api/client';
 import { getLocaleFromQuery, getStoredLocale, normalizeLocale, setLocale } from '@/i18n';
 import { getMobileBasePathWithSlash } from '@/utils';
 import {
@@ -318,7 +319,6 @@ import {
 const route = useRoute();
 const { t, locale } = useI18n({ useScope: 'global' });
 
-const ACCESS_KEY_STORAGE = 'nginxpulse_access_key';
 const ACCESS_KEY_EVENT = 'nginxpulse:access-key-required';
 const PWA_PROMPT_DISMISS_KEY = 'nginxpulse_pwa_prompt_dismissed_at';
 const PWA_PROMPT_THROTTLE_DAYS = 14;
@@ -802,6 +802,7 @@ async function refreshAppStatus() {
     demoMode.value = Boolean(status.demo_mode);
     migrationRequired.value = Boolean(status.migration_required);
     setupRequired.value = Boolean(status.setup_required);
+    setAccessKeyExpireDays(status.access_key_expire_days);
     pwaPromptEnabled.value = Boolean(status.mobile_pwa_enabled);
     accessKeyRequired.value = false;
     accessKeyErrorKey.value = null;
@@ -839,7 +840,7 @@ async function submitAccessKey() {
     return;
   }
   accessKeySubmitting.value = true;
-  localStorage.setItem(ACCESS_KEY_STORAGE, value);
+  saveAccessKey(value);
   try {
     await refreshAppStatus();
     if (!accessKeyRequired.value) {
@@ -859,6 +860,11 @@ function setAccessKeyErrorMessage(message: string) {
   }
   if (normalized.includes('访问密钥无效') || normalized.includes('invalid')) {
     accessKeyErrorKey.value = 'access.invalid';
+    accessKeyErrorText.value = '';
+    return;
+  }
+  if (normalized.includes('过期') || normalized.includes('expired')) {
+    accessKeyErrorKey.value = 'access.expired';
     accessKeyErrorText.value = '';
     return;
   }

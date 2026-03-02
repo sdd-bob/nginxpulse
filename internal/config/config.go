@@ -94,18 +94,19 @@ type WhitelistConfig struct {
 }
 
 type SystemConfig struct {
-	LogDestination    string   `json:"logDestination"`
-	TaskInterval      string   `json:"taskInterval"` // "5m" "25s"
-	HTTPSourceTimeout string   `json:"httpSourceTimeout,omitempty"`
-	LogRetentionDays  int      `json:"logRetentionDays"`
-	ParseBatchSize    int      `json:"parseBatchSize"`
-	IPGeoCacheLimit   int      `json:"ipGeoCacheLimit"`
-	IPGeoAPIURL       string   `json:"ipGeoApiUrl"`
-	DemoMode          bool     `json:"demoMode"`
-	AccessKeys        []string `json:"accessKeys"`
-	Language          string   `json:"language"`
-	WebBasePath       string   `json:"webBasePath,omitempty"`
-	MobilePWAEnabled  bool     `json:"mobilePwaEnabled"`
+	LogDestination      string   `json:"logDestination"`
+	TaskInterval        string   `json:"taskInterval"` // "5m" "25s"
+	HTTPSourceTimeout   string   `json:"httpSourceTimeout,omitempty"`
+	LogRetentionDays    int      `json:"logRetentionDays"`
+	ParseBatchSize      int      `json:"parseBatchSize"`
+	IPGeoCacheLimit     int      `json:"ipGeoCacheLimit"`
+	IPGeoAPIURL         string   `json:"ipGeoApiUrl"`
+	DemoMode            bool     `json:"demoMode"`
+	AccessKeys          []string `json:"accessKeys"`
+	AccessKeyExpireDays int      `json:"accessKeyExpireDays"`
+	Language            string   `json:"language"`
+	WebBasePath         string   `json:"webBasePath,omitempty"`
+	MobilePWAEnabled    bool     `json:"mobilePwaEnabled"`
 }
 
 type ServerConfig struct {

@@ -164,6 +164,9 @@ func ValidateConfig(cfg *Config, opts ValidateOptions) ValidationResult {
 	if cfg.System.IPGeoCacheLimit <= 0 {
 		addError("system.ipGeoCacheLimit", "ipGeoCacheLimit 必须大于 0")
 	}
+	if cfg.System.AccessKeyExpireDays <= 0 {
+		addError("system.accessKeyExpireDays", "accessKeyExpireDays 必须大于 0")
+	}
 	if strings.TrimSpace(cfg.System.HTTPSourceTimeout) != "" {
 		timeout, err := time.ParseDuration(strings.TrimSpace(cfg.System.HTTPSourceTimeout))
 		if err != nil {

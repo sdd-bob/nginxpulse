@@ -381,9 +381,22 @@
                   />
                 </div>
               </div>
-              <div class="setup-field">
-                <label class="setup-label">{{ t('setup.fields.accessKeys') }}</label>
-                <input v-model.trim="systemDraft.accessKeysText" class="setup-input" type="text" :placeholder="t('setup.placeholders.accessKeys')" />
+              <div class="setup-field-grid">
+                <div class="setup-field">
+                  <label class="setup-label">{{ t('setup.fields.accessKeys') }}</label>
+                  <input v-model.trim="systemDraft.accessKeysText" class="setup-input" type="text" :placeholder="t('setup.placeholders.accessKeys')" />
+                </div>
+                <div class="setup-field">
+                  <label class="setup-label">{{ t('setup.fields.accessKeyExpireDays') }}</label>
+                  <input
+                    v-model.trim="systemDraft.accessKeyExpireDays"
+                    class="setup-input"
+                    type="number"
+                    min="1"
+                    :placeholder="t('setup.placeholders.accessKeyExpireDays')"
+                  />
+                  <div class="setup-hint">{{ t('setup.hints.accessKeyExpireDays') }}</div>
+                </div>
               </div>
               <div class="setup-feature-grid">
                 <div class="setup-feature-card">
@@ -742,6 +755,7 @@ const systemDraft = reactive({
   demoMode: false,
   mobilePwaEnabled: false,
   accessKeysText: '',
+  accessKeyExpireDays: '7',
   language: 'zh-CN',
   webBasePath: '',
 });
@@ -1343,6 +1357,7 @@ function buildConfig(collectErrors = true): { config: ConfigPayload; errors: Fie
       demoMode: systemDraft.demoMode,
       mobilePwaEnabled: systemDraft.mobilePwaEnabled,
       accessKeys: splitList(systemDraft.accessKeysText),
+      accessKeyExpireDays: parseOptionalInt(systemDraft.accessKeyExpireDays, 'system.accessKeyExpireDays', errors, false),
       language: systemDraft.language,
       webBasePath,
     },
@@ -1550,6 +1565,7 @@ function hydrateDraft(config: ConfigPayload) {
   systemDraft.demoMode = Boolean(config.system?.demoMode);
   systemDraft.mobilePwaEnabled = Boolean(config.system?.mobilePwaEnabled);
   systemDraft.accessKeysText = (config.system?.accessKeys || []).join(', ');
+  systemDraft.accessKeyExpireDays = String(config.system?.accessKeyExpireDays ?? 7);
   systemDraft.language = config.system?.language || 'zh-CN';
   systemDraft.webBasePath = config.system?.webBasePath || '';
 
