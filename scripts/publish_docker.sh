@@ -17,6 +17,9 @@ Environment:
   DOCKERHUB_REPO    Same as --repo
   VERSION           Same as --version
   PLATFORMS         Same as --platforms
+
+Notes:
+  - If version contains "beta", this script will NOT push the :latest tag.
 EOF
 }
 
@@ -69,6 +72,11 @@ if [[ -z "$VERSION" ]]; then
   fi
 fi
 
+version_lower="$(printf '%s' "$VERSION" | tr '[:upper:]' '[:lower:]')"
+if [[ "$version_lower" == *beta* ]]; then
+  TAG_LATEST=false
+fi
+
 BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 GIT_COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")"
 
@@ -99,6 +107,11 @@ fi
 echo "Repo:     $REPO"
 echo "Version:  $VERSION"
 echo "Platforms:$PLATFORMS"
+if $TAG_LATEST; then
+  echo "Latest:   enabled"
+else
+  echo "Latest:   disabled (beta version detected)"
+fi
 echo "Commit:   $GIT_COMMIT"
 echo "Time:     $BUILD_TIME"
 
