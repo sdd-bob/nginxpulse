@@ -111,6 +111,35 @@ https://example.com/m/?tabbarBottom=false
 - `timeLayout` (string): 时间解析格式，留空走默认。
 - `sources` (array): 多源配置，启用后将替代 `logPath`。
 
+#### 白名单配置（可选）
+白名单是 **按站点生效** 的，配置在每个 `websites[]` 项下：
+
+```json
+"whitelist": {
+  "enabled": true,
+  "ips": ["1.1.1.1", "10.0.0.0/8", "1.1.1.10-1.1.1.100"],
+  "cities": ["上海", "Hangzhou"],
+  "nonMainland": false
+}
+```
+
+字段说明：
+- `enabled` (bool): 白名单总开关。
+- `ips` (string[]): IP 规则列表，支持：
+  - 单 IP：`1.1.1.1`
+  - CIDR：`10.0.0.0/8`
+  - IP 段：`1.1.1.10-1.1.1.100`
+- `cities` (string[]): 城市规则（包含匹配，忽略常见行政后缀差异）。
+- `nonMainland` (bool): 非大陆访问规则（海外或港澳台）。
+
+校验规则：
+- `enabled=true` 时，如果 `ips`、`cities`、`nonMainland` 都未配置，将校验失败。
+- `ips` 中每一项必须是合法 IP/CIDR/IP 段（IP 段起始地址不能大于结束地址）。
+
+当前行为说明：
+- 命中白名单时会写入一条系统通知（分类 `whitelist`，标题“白名单命中”）。
+- **不会**阻止日志解析和入库，白名单目前用于标记与告警提示，不是访问控制防火墙。
+
 ### 日志解析字段说明
 默认 Nginx 正则需要包含以下命名字段（可使用别名）：
 - IP: `ip`, `remote_addr`, `client_ip`, `http_x_forwarded_for`
