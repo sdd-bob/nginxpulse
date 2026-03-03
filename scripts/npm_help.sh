@@ -23,6 +23,8 @@ NginxPulse npm 脚本总览（在仓库根目录执行）
   发布正式 Docker 镜像（默认仓库: magiccoders/nginxpulse）
 - npm run docker:publish:beta -- [-v <version>] [-p <platforms>] [--no-push]
   发布 Beta Docker 镜像（默认仓库: magiccoders/nginxpulse）
+- npm run docker:verify-latest -- -v <version> [-l <latest_tag>]
+  校验 latest（或指定 tag）是否指向目标版本（默认仓库: magiccoders/nginxpulse）
 - npm run wiki:push
   推送 docs/wiki 到 GitHub Wiki
 
