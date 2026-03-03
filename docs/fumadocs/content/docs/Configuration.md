@@ -186,6 +186,7 @@ https://example.com/m/?tabbarBottom=false
 通用字段：
 - `id` (string, 必填): 唯一 ID，不能重复。
 - `type` (string, 必填): `local` | `sftp` | `http` | `s3` | `agent`
+- 术语说明：这里的 `agent` 指日志采集代理（collector），不是 AI 大模型 Agent（LLM Agent）。
 - `mode` (string): `poll` | `stream` | `hybrid`，默认 `poll`。
 - `pollInterval` (string): 轮询间隔（当前版本未启用，预留字段）。
 - `compression` (string): `gz` | `none` | `auto`，默认 `auto`（按文件后缀自动判断）。
@@ -274,6 +275,7 @@ https://example.com/m/?tabbarBottom=false
 
 #### agent 源示例
 字段要点：用于接入 Agent 流式采集（当前版本不参与定期扫描）。
+> 说明：这里的 Agent 是日志采集进程，不是 AI 大模型 Agent。
 ```json
 {
   "id": "agent-main",

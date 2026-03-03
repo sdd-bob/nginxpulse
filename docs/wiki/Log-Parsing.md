@@ -311,6 +311,7 @@ grep sshd /var/log/messages | tail -n 80
 
 ### Push Agent（实时推送）
 适合内网或边缘节点场景，通过独立进程实时推送日志行。
+> 术语说明：这里的 Agent 指日志采集代理进程，不是 AI 大模型 Agent（LLM Agent）。
 
 你需要在 **两台机器** 上分别做以下事：
 
