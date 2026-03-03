@@ -250,8 +250,7 @@ const enUS = {
       httpSourceTimeout: '2m',
       accessKeys: 'Separate multiple keys with commas',
       accessKeyExpireDays: '7',
-      alertPushJson:
-        '{"enabled":true,"timeout":"5s","feishu":{"enabled":true,"webhook":"https://open.feishu.cn/open-apis/bot/v2/hook/xxx"}}',
+      alertPushJson: 'Enter an alertPush JSON object. See the hint below for example',
       alertPushTestMessage: 'This is a test alert message from NginxPulse.',
       statusCodeInclude: '200, 204, 206',
       whitelistIps: '1.1.1.1, 10.0.0.0/8, 1.1.1.1-1.1.1.255',

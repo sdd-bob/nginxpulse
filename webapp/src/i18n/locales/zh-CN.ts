@@ -250,8 +250,7 @@ const zhCN = {
       httpSourceTimeout: '2m',
       accessKeys: '多个密钥用逗号分隔',
       accessKeyExpireDays: '7',
-      alertPushJson:
-        '{"enabled":true,"timeout":"5s","feishu":{"enabled":true,"webhook":"https://open.feishu.cn/open-apis/bot/v2/hook/xxx"}}',
+      alertPushJson: '请输入 alertPush JSON 对象，示例见下方说明',
       alertPushTestMessage: '这是一条来自 NginxPulse 的测试告警消息。',
       statusCodeInclude: '200, 204, 206',
       whitelistIps: '1.1.1.1, 10.0.0.0/8, 1.1.1.1-1.1.1.255',
