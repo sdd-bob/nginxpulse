@@ -19,10 +19,10 @@ NginxPulse npm 脚本总览（在仓库根目录执行）
   构建 fumadocs，并输出 dist/nginxpulse-docs 最新产物
 
 发布相关
-- npm run docker:publish -- -r <repo> [-v <version>] [-p <platforms>] [--no-push]
-  发布正式 Docker 镜像
-- npm run docker:publish:beta -- -r <repo> [-v <version>] [-p <platforms>] [--no-push]
-  发布 Beta Docker 镜像
+- npm run docker:publish -- [-v <version>] [-p <platforms>] [--no-push]
+  发布正式 Docker 镜像（默认仓库: magiccoders/nginxpulse）
+- npm run docker:publish:beta -- [-v <version>] [-p <platforms>] [--no-push]
+  发布 Beta Docker 镜像（默认仓库: magiccoders/nginxpulse）
 - npm run wiki:push
   推送 docs/wiki 到 GitHub Wiki
 

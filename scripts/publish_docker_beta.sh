@@ -9,7 +9,7 @@ Usage: scripts/publish_docker_beta.sh -r <repo> [-v <version>] [-p <platforms>] 
 
 Options:
   -r, --repo        Docker Hub repo, e.g. username/nginxpulse
-  -v, --version     Beta version tag (defaults to git describe + beta timestamp)
+  -v, --version     Beta version tag (defaults to git describe or timestamp)
   -p, --platforms   Build platforms (default: linux/amd64,linux/arm64)
   --no-push         Build only (no push)
 
@@ -70,7 +70,6 @@ if [[ -z "$VERSION" ]]; then
   else
     VERSION="$(git -C "$ROOT_DIR" describe --tags --abbrev=7 --always 2>/dev/null || date -u +%Y%m%d%H%M%S)"
   fi
-  VERSION="${VERSION}-beta.$(date -u +%Y%m%d%H%M%S)"
 else
   if [[ "$VERSION" != *beta* ]]; then
     VERSION="${VERSION}-beta"
