@@ -18,6 +18,10 @@ const (
 	ipGeoFailureCooldown     = 12 * time.Hour
 )
 
+func PendingLocationLabel() string {
+	return pendingLocationLabel
+}
+
 var (
 	ipGeoMu      sync.RWMutex
 	ipGeoRunning bool

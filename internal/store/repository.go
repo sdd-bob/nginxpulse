@@ -243,6 +243,32 @@ func (r *Repository) GetIPGeoCache(ips []string) (map[string]IPGeoCacheEntry, er
 	if err := rows.Err(); err != nil {
 		return results, err
 	}
+
+	overrideQuery := fmt.Sprintf(
+		`SELECT ip, domestic, global FROM "ip_geo_manual_overrides" WHERE ip IN (%s)`,
+		strings.Join(placeholders, ","),
+	)
+	overrideRows, err := r.db.Query(sqlutil.ReplacePlaceholders(overrideQuery), args...)
+	if err != nil {
+		return results, err
+	}
+	defer overrideRows.Close()
+
+	for overrideRows.Next() {
+		var ip, domestic, global string
+		if err := overrideRows.Scan(&ip, &domestic, &global); err != nil {
+			return results, err
+		}
+		results[ip] = IPGeoCacheEntry{
+			Domestic: domestic,
+			Global:   global,
+			Source:   "manual",
+		}
+	}
+	if err := overrideRows.Err(); err != nil {
+		return results, err
+	}
+
 	return results, nil
 }
 

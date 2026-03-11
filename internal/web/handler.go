@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -553,6 +554,207 @@ func SetupRoutes(
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"deleted": deleted,
+		})
+	})
+
+	router.GET("/api/ip-geo/override", func(c *gin.Context) {
+		if statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "初始化模式暂不支持 IP 归属地覆盖",
+			})
+			return
+		}
+
+		ip := strings.TrimSpace(c.DefaultQuery("ip", ""))
+		if net.ParseIP(ip) == nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "IP 参数无效",
+			})
+			return
+		}
+
+		repo := statsFactory.Repo()
+		override, err := repo.GetIPGeoManualOverride(ip)
+		if err != nil {
+			logrus.WithError(err).Error("读取 IP 归属地人工覆盖失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("读取 IP 归属地人工覆盖失败: %v", err),
+			})
+			return
+		}
+
+		entry, overridden, note, err := repo.GetEffectiveIPGeo(ip, ingest.PendingLocationLabel())
+		if err != nil {
+			logrus.WithError(err).Error("读取 IP 归属地详情失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("读取 IP 归属地详情失败: %v", err),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"ip":         ip,
+			"domestic":   entry.Domestic,
+			"global":     entry.Global,
+			"source":     entry.Source,
+			"note":       note,
+			"overridden": overridden,
+			"override":   override,
+		})
+	})
+
+	router.POST("/api/ip-geo/override", func(c *gin.Context) {
+		if statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "初始化模式暂不支持 IP 归属地覆盖",
+			})
+			return
+		}
+
+		type overrideRequest struct {
+			IP       string `json:"ip"`
+			Domestic string `json:"domestic"`
+			Global   string `json:"global"`
+			Note     string `json:"note"`
+		}
+
+		var req overrideRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "请求参数错误",
+			})
+			return
+		}
+
+		ip := strings.TrimSpace(req.IP)
+		domestic := strings.TrimSpace(req.Domestic)
+		global := strings.TrimSpace(req.Global)
+		note := strings.TrimSpace(req.Note)
+		if net.ParseIP(ip) == nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "IP 参数无效",
+			})
+			return
+		}
+		if domestic == "" || global == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "归属地不能为空",
+			})
+			return
+		}
+
+		repo := statsFactory.Repo()
+		if err := repo.UpsertIPGeoManualOverride(store.IPGeoManualOverride{
+			IP:       ip,
+			Domestic: domestic,
+			Global:   global,
+			Note:     note,
+		}); err != nil {
+			logrus.WithError(err).Error("保存 IP 归属地人工覆盖失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("保存 IP 归属地人工覆盖失败: %v", err),
+			})
+			return
+		}
+		if err := repo.DeleteIPGeoPending([]string{ip}); err != nil {
+			logrus.WithError(err).Warn("清理 IP 归属地待解析队列失败")
+		}
+
+		logsAffected, sessionsAffected, updatedWebsites, err := repo.ApplyIPGeoLocationForIP(ip, store.IPGeoCacheEntry{
+			Domestic: domestic,
+			Global:   global,
+			Source:   "manual",
+		})
+		if err != nil {
+			logrus.WithError(err).Error("回写 IP 归属地人工覆盖失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("回写 IP 归属地人工覆盖失败: %v", err),
+			})
+			return
+		}
+
+		statsFactory.ClearCache()
+		c.JSON(http.StatusOK, gin.H{
+			"success":           true,
+			"ip":                ip,
+			"domestic":          domestic,
+			"global":            global,
+			"note":              note,
+			"source":            "manual",
+			"overridden":        true,
+			"updated_websites":  updatedWebsites,
+			"affected_logs":     logsAffected,
+			"affected_sessions": sessionsAffected,
+		})
+	})
+
+	router.DELETE("/api/ip-geo/override", func(c *gin.Context) {
+		if statsFactory == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": "初始化模式暂不支持 IP 归属地覆盖",
+			})
+			return
+		}
+
+		ip := strings.TrimSpace(c.DefaultQuery("ip", ""))
+		if net.ParseIP(ip) == nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "IP 参数无效",
+			})
+			return
+		}
+
+		repo := statsFactory.Repo()
+		if err := repo.DeleteIPGeoManualOverride(ip); err != nil {
+			logrus.WithError(err).Error("删除 IP 归属地人工覆盖失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("删除 IP 归属地人工覆盖失败: %v", err),
+			})
+			return
+		}
+
+		entry, _, _, err := repo.GetEffectiveIPGeo(ip, ingest.PendingLocationLabel())
+		if err != nil {
+			logrus.WithError(err).Error("读取 IP 归属地缓存失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("读取 IP 归属地缓存失败: %v", err),
+			})
+			return
+		}
+
+		if entry.Source == "pending" {
+			if err := repo.MarkIPGeoPendingForIP(ip, ingest.PendingLocationLabel()); err != nil {
+				logrus.WithError(err).Error("恢复 IP 归属地自动解析失败")
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"error": fmt.Sprintf("恢复 IP 归属地自动解析失败: %v", err),
+				})
+				return
+			}
+			if logParser != nil {
+				go logParser.ProcessPendingIPGeo(1)
+			}
+		}
+
+		logsAffected, sessionsAffected, updatedWebsites, err := repo.ApplyIPGeoLocationForIP(ip, entry)
+		if err != nil {
+			logrus.WithError(err).Error("回写 IP 归属地自动结果失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": fmt.Sprintf("回写 IP 归属地自动结果失败: %v", err),
+			})
+			return
+		}
+
+		statsFactory.ClearCache()
+		c.JSON(http.StatusOK, gin.H{
+			"success":           true,
+			"ip":                ip,
+			"domestic":          entry.Domestic,
+			"global":            entry.Global,
+			"source":            entry.Source,
+			"overridden":        false,
+			"updated_websites":  updatedWebsites,
+			"affected_logs":     logsAffected,
+			"affected_sessions": sessionsAffected,
 		})
 	})
 

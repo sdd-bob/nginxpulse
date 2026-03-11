@@ -653,6 +653,9 @@ func (r *Repository) createTables() error {
 	if err := r.ensureIPGeoCacheTable(); err != nil {
 		return err
 	}
+	if err := r.ensureIPGeoManualOverrideTable(); err != nil {
+		return err
+	}
 	if err := r.ensureIPGeoPendingTable(); err != nil {
 		return err
 	}

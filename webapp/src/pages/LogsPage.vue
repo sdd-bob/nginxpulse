@@ -327,6 +327,14 @@
         <div class="log-detail-item">
           <span class="log-detail-label">{{ t('common.location') }}</span>
           <span class="log-detail-value">{{ selectedLog?.location || t('common.none') }}</span>
+          <button
+            type="button"
+            class="log-detail-action"
+            :disabled="!selectedLog?.ip || selectedLog.ip === t('common.none')"
+            @click="openIPGeoEditor"
+          >
+            {{ t('logs.editLocation') }}
+          </button>
         </div>
         <div class="log-detail-item">
           <span class="log-detail-label">{{ t('logs.request') }}</span>
@@ -397,6 +405,87 @@
           </span>
         </div>
       </div>
+      <template #footer>
+        <Button
+          text
+          severity="secondary"
+          :label="t('logs.editLocation')"
+          :disabled="!selectedLog?.ip || selectedLog.ip === t('common.none')"
+          @click="openIPGeoEditor"
+        />
+        <Button :label="t('common.close')" @click="logDetailVisible = false" />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="ipGeoEditorVisible"
+      modal
+      class="ip-geo-editor-dialog"
+      :closable="!ipGeoEditorSaving && !ipGeoEditorResetting"
+      :dismissableMask="!ipGeoEditorSaving && !ipGeoEditorResetting"
+      :header="t('logs.editLocationTitle')"
+      @hide="resetIPGeoEditorState"
+    >
+      <div class="reparse-dialog-body ip-geo-editor-body">
+        <p class="reparse-dialog-note">{{ t('logs.editLocationHint', { ip: selectedLog?.ip || '-' }) }}</p>
+        <div class="ip-geo-editor-grid">
+          <div class="ip-geo-editor-field">
+            <label for="ip-geo-domestic">{{ t('logs.locationDomestic') }}</label>
+            <InputText
+              id="ip-geo-domestic"
+              v-model.trim="ipGeoFormDomestic"
+              :disabled="ipGeoEditorLoading || ipGeoEditorSaving || ipGeoEditorResetting"
+            />
+          </div>
+          <div class="ip-geo-editor-field">
+            <label for="ip-geo-global">{{ t('logs.locationGlobal') }}</label>
+            <InputText
+              id="ip-geo-global"
+              v-model.trim="ipGeoFormGlobal"
+              :disabled="ipGeoEditorLoading || ipGeoEditorSaving || ipGeoEditorResetting"
+            />
+          </div>
+        </div>
+        <div class="ip-geo-editor-field">
+          <label for="ip-geo-note">{{ t('logs.locationNote') }}</label>
+          <textarea
+            id="ip-geo-note"
+            v-model.trim="ipGeoFormNote"
+            class="ip-geo-editor-textarea"
+            rows="4"
+            :disabled="ipGeoEditorLoading || ipGeoEditorSaving || ipGeoEditorResetting"
+          ></textarea>
+        </div>
+        <p v-if="ipGeoOverrideUpdatedAt" class="reparse-dialog-note">
+          {{ t('logs.locationOverrideMeta', { time: ipGeoOverrideUpdatedAt }) }}
+        </p>
+        <p v-if="ipGeoEditorError" class="reparse-dialog-error">{{ ipGeoEditorError }}</p>
+      </div>
+      <template #footer>
+        <Button
+          v-if="ipGeoOverrideActive"
+          text
+          severity="danger"
+          :label="t('logs.resetLocation')"
+          :loading="ipGeoEditorResetting"
+          :disabled="ipGeoEditorLoading || ipGeoEditorSaving"
+          @click="handleResetIPGeoOverride"
+        />
+        <Button
+          text
+          severity="secondary"
+          :label="t('common.cancel')"
+          :disabled="ipGeoEditorSaving || ipGeoEditorResetting"
+          @click="ipGeoEditorVisible = false"
+        />
+        <Button
+          severity="primary"
+          :label="t('common.confirm')"
+          :loading="ipGeoEditorSaving"
+          :disabled="ipGeoEditorLoading || ipGeoEditorResetting"
+          @click="handleSaveIPGeoOverride"
+        />
+      </template>
     </Dialog>
 
     <div class="card pagination-box">
@@ -599,14 +688,17 @@ import {
   fetchWebsites,
   cancelLogsExport,
   downloadLogsExport,
+  fetchIPGeoOverride,
   reparseAllLogs,
   reparseLogs,
+  resetIPGeoOverride,
   listLogsExportJobs,
+  saveIPGeoOverride,
   startLogsExport,
   fetchLogsExportStatus,
   retryLogsExport,
 } from '@/api';
-import type { LogsExportJob, WebsiteInfo } from '@/api/types';
+import type { IPGeoOverrideResponse, LogsExportJob, WebsiteInfo } from '@/api/types';
 import { formatTraffic, getUserPreference, saveUserPreference } from '@/utils';
 import { formatBrowserLabel, formatDeviceLabel, formatLocationLabel, formatOSLabel, formatRefererLabel } from '@/i18n/mappings';
 import { normalizeLocale } from '@/i18n';
@@ -632,6 +724,10 @@ type LogRow = {
   host: string;
   requestId: string;
   upstreamAddr: string;
+  domesticLocation: string;
+  globalLocation: string;
+  locationNote: string;
+  locationOverrideActive: boolean;
   referer: string;
   browser: string;
   os: string;
@@ -739,6 +835,16 @@ const parsingPending = ref(false);
 const parsingPendingProgress = ref<number | null>(null);
 const logDetailVisible = ref(false);
 const selectedLog = ref<LogRow | null>(null);
+const ipGeoEditorVisible = ref(false);
+const ipGeoEditorLoading = ref(false);
+const ipGeoEditorSaving = ref(false);
+const ipGeoEditorResetting = ref(false);
+const ipGeoEditorError = ref('');
+const ipGeoFormDomestic = ref('');
+const ipGeoFormGlobal = ref('');
+const ipGeoFormNote = ref('');
+const ipGeoOverrideActive = ref(false);
+const ipGeoOverrideUpdatedAt = ref('');
 const progressPollIntervalMs = 3000;
 let progressPollTimer: ReturnType<typeof setInterval> | null = null;
 let progressPollInFlight = false;
@@ -1514,12 +1620,144 @@ function openLogDetail(event: LogRowClickEvent) {
   logDetailVisible.value = true;
 }
 
+function resetIPGeoEditorState() {
+  ipGeoEditorError.value = '';
+  ipGeoFormDomestic.value = '';
+  ipGeoFormGlobal.value = '';
+  ipGeoFormNote.value = '';
+  ipGeoOverrideActive.value = false;
+  ipGeoOverrideUpdatedAt.value = '';
+  ipGeoEditorLoading.value = false;
+  ipGeoEditorSaving.value = false;
+  ipGeoEditorResetting.value = false;
+}
+
+function formatEditorTimestamp(value?: string) {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+}
+
+function applyIPGeoOverridePayload(payload: IPGeoOverrideResponse) {
+  const domestic = (
+    payload.override?.domestic ||
+    (payload.source !== 'pending' ? payload.domestic : '') ||
+    selectedLog.value?.domesticLocation ||
+    ''
+  ).trim();
+  const global = (
+    payload.override?.global ||
+    (payload.source !== 'pending' ? payload.global : '') ||
+    selectedLog.value?.globalLocation ||
+    ''
+  ).trim();
+  ipGeoFormDomestic.value = domestic;
+  ipGeoFormGlobal.value = global;
+  ipGeoFormNote.value = (payload.override?.note || payload.note || '').trim();
+  ipGeoOverrideActive.value = Boolean(payload.overridden);
+  ipGeoOverrideUpdatedAt.value = formatEditorTimestamp(payload.override?.updated_at);
+}
+
+function updateSelectedLogLocation(domestic: string, global: string, note = '', overridden = false) {
+  if (!selectedLog.value) {
+    return;
+  }
+  const domesticTrimmed = domestic.trim();
+  const globalTrimmed = global.trim();
+  const locationRaw = domesticTrimmed || globalTrimmed;
+  selectedLog.value = {
+    ...selectedLog.value,
+    domesticLocation: domesticTrimmed,
+    globalLocation: globalTrimmed,
+    locationNote: note.trim(),
+    locationOverrideActive: overridden,
+    location: formatLocationLabel(locationRaw, currentLocale.value, t) || t('common.none'),
+  };
+}
+
+async function openIPGeoEditor() {
+  if (!selectedLog.value?.ip || selectedLog.value.ip === t('common.none')) {
+    return;
+  }
+  resetIPGeoEditorState();
+  ipGeoEditorVisible.value = true;
+  ipGeoEditorLoading.value = true;
+  ipGeoFormDomestic.value = selectedLog.value.domesticLocation || '';
+  ipGeoFormGlobal.value = selectedLog.value.globalLocation || '';
+  ipGeoFormNote.value = selectedLog.value.locationNote || '';
+  ipGeoOverrideActive.value = selectedLog.value.locationOverrideActive;
+  try {
+    const payload = await fetchIPGeoOverride(selectedLog.value.ip);
+    applyIPGeoOverridePayload(payload);
+  } catch (error) {
+    ipGeoEditorError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  } finally {
+    ipGeoEditorLoading.value = false;
+  }
+}
+
+async function handleSaveIPGeoOverride() {
+  if (!selectedLog.value?.ip || ipGeoEditorSaving.value) {
+    return;
+  }
+  const domestic = ipGeoFormDomestic.value.trim();
+  const global = ipGeoFormGlobal.value.trim();
+  if (!domestic || !global) {
+    ipGeoEditorError.value = t('logs.locationRequired');
+    return;
+  }
+  ipGeoEditorSaving.value = true;
+  ipGeoEditorError.value = '';
+  try {
+    const result = await saveIPGeoOverride({
+      ip: selectedLog.value.ip,
+      domestic,
+      global,
+      note: ipGeoFormNote.value.trim(),
+    });
+    updateSelectedLogLocation(result.domestic, result.global, result.note || '', true);
+    ipGeoOverrideActive.value = true;
+    ipGeoEditorVisible.value = false;
+    await loadLogs();
+  } catch (error) {
+    ipGeoEditorError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  } finally {
+    ipGeoEditorSaving.value = false;
+  }
+}
+
+async function handleResetIPGeoOverride() {
+  if (!selectedLog.value?.ip || ipGeoEditorResetting.value) {
+    return;
+  }
+  ipGeoEditorResetting.value = true;
+  ipGeoEditorError.value = '';
+  try {
+    const result = await resetIPGeoOverride(selectedLog.value.ip);
+    updateSelectedLogLocation(result.domestic, result.global, '', false);
+    ipGeoOverrideActive.value = false;
+    ipGeoEditorVisible.value = false;
+    await loadLogs();
+  } catch (error) {
+    ipGeoEditorError.value = error instanceof Error ? error.message : t('common.requestFailed');
+  } finally {
+    ipGeoEditorResetting.value = false;
+  }
+}
+
 const logs = computed(() => {
   const emptyLabel = t('common.none');
   return rawLogs.value.map((log) => {
     const time = log.time || emptyLabel;
     const ip = log.ip || emptyLabel;
-    const locationRaw = log.domestic_location || log.global_location || '';
+    const domesticLocation = String(log.domestic_location || '').trim();
+    const globalLocation = String(log.global_location || '').trim();
+    const locationRaw = domesticLocation || globalLocation || '';
     const location = formatLocationLabel(locationRaw, currentLocale.value, t) || emptyLabel;
     const method = log.method || '';
     const url = log.url || '';
@@ -1558,6 +1796,10 @@ const logs = computed(() => {
       host,
       requestId,
       upstreamAddr,
+      domesticLocation,
+      globalLocation,
+      locationNote: '',
+      locationOverrideActive: false,
       referer,
       browser,
       os,
@@ -1587,6 +1829,12 @@ watch(exportDialogVisible, (visible) => {
   } else {
     stopExportHistoryPolling();
     unbindExportHistoryScroll();
+  }
+});
+
+watch(logDetailVisible, (visible) => {
+  if (!visible) {
+    ipGeoEditorVisible.value = false;
   }
 });
 
@@ -2423,6 +2671,65 @@ function nextPage() {
   word-break: break-all;
 }
 
+.log-detail-action {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent-color);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.log-detail-action:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.ip-geo-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ip-geo-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ip-geo-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ip-geo-editor-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ip-geo-editor-textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ip-geo-editor-textarea:focus {
+  outline: none;
+  border-color: rgba(var(--primary-color-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.14);
+}
+
 .pagination-box {
   padding: 15px 20px;
   margin-top: 15px;
@@ -2631,6 +2938,10 @@ function nextPage() {
   }
 
   .log-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ip-geo-editor-grid {
     grid-template-columns: 1fr;
   }
 }

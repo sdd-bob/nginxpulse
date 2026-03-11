@@ -214,6 +214,38 @@ export interface IPGeoAPIFailureListResponse {
   has_more?: boolean;
 }
 
+export interface IPGeoOverride {
+  ip: string;
+  domestic: string;
+  global: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface IPGeoOverrideResponse {
+  ip: string;
+  domestic: string;
+  global: string;
+  source: string;
+  note?: string;
+  overridden: boolean;
+  override?: IPGeoOverride | null;
+}
+
+export interface IPGeoOverrideMutationResponse {
+  success: boolean;
+  ip: string;
+  domestic: string;
+  global: string;
+  source: string;
+  note?: string;
+  overridden: boolean;
+  updated_websites?: number;
+  affected_logs?: number;
+  affected_sessions?: number;
+}
+
 export interface SystemNotification {
   id: number;
   level: string;

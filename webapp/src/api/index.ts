@@ -17,6 +17,8 @@ import type {
   SimpleSeriesStats,
   SystemNotificationListResponse,
   TimeSeriesStats,
+  IPGeoOverrideResponse,
+  IPGeoOverrideMutationResponse,
   WebsiteInfo,
   WebsitesResponse,
 } from './types';
@@ -135,6 +137,30 @@ export const clearIPGeoFailures = async (options: {
       keyword: options.keyword || '',
     }
   );
+  return response.data;
+};
+
+export const fetchIPGeoOverride = async (ip: string): Promise<IPGeoOverrideResponse> => {
+  const response = await client.get<ApiResponse<IPGeoOverrideResponse>>('api/ip-geo/override', {
+    params: buildParams({ ip }),
+  });
+  return response.data;
+};
+
+export const saveIPGeoOverride = async (payload: {
+  ip: string;
+  domestic: string;
+  global: string;
+  note?: string;
+}): Promise<IPGeoOverrideMutationResponse> => {
+  const response = await client.post<ApiResponse<IPGeoOverrideMutationResponse>>('api/ip-geo/override', payload);
+  return response.data;
+};
+
+export const resetIPGeoOverride = async (ip: string): Promise<IPGeoOverrideMutationResponse> => {
+  const response = await client.delete<ApiResponse<IPGeoOverrideMutationResponse>>('api/ip-geo/override', {
+    params: buildParams({ ip }),
+  });
   return response.data;
 };
 
