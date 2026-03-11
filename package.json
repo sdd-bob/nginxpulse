@@ -23,7 +23,7 @@
     "mobile:dev": "npm --prefix ./webapp_mobile run dev",
     "mobile:build": "npm --prefix ./webapp_mobile run build",
     "mobile:preview": "npm --prefix ./webapp_mobile run preview",
-    "fumadocs:dev": "npm --prefix ./docs/fumadocs run dev",
-    "fumadocs:build": "npm --prefix ./docs/fumadocs run build"
+    "fumadocs:dev": "bash ./scripts/dev_fumadocs.sh",
+    "fumadocs:build": "bash ./scripts/build_fumadocs.sh"
   }
 }

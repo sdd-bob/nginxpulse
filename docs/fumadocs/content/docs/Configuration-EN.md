@@ -139,6 +139,48 @@ Supported `logFormat` variables (common):
 "logFormat": "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" \"$http_x_forwarded_for\" $host $scheme $request_length $remote_port $upstream_addr $upstream_status $upstream_response_time $upstream_connect_time $upstream_header_time"
 ```
 
+#### Lightweight Trace Fields (duration / request size / upstream info)
+If you want NginxPulse to show these fields in the Logs page:
+- Request duration
+- Request size
+- Upstream duration
+- Upstream address
+- Host
+- Request ID
+
+your Nginx `access_log` must already include them. NginxPulse does **not** capture request bodies or response content by itself; it can only parse fields that already exist in the log.
+
+Minimum recommended variables:
+- `$request_time`: total request duration
+- `$request_length`: request size (request line + headers + body)
+- `$host`: request host
+
+If you use reverse proxy / upstream, also recommend:
+- `$upstream_response_time`: upstream response duration
+- `$upstream_addr`: upstream address
+- `$request_id`: unique request ID (if this variable is configured in your Nginx)
+
+Recommended `log_format`:
+```nginx
+log_format nginxpulse_trace '$remote_addr - $remote_user [$time_local] '
+                            '"$request" $status $body_bytes_sent '
+                            '"$http_referer" "$http_user_agent" '
+                            '$request_time $request_length '
+                            '$upstream_response_time $upstream_addr '
+                            '$host $request_id';
+```
+
+If you fill `websites[].logFormat` manually, keep it aligned with the same fields, for example:
+```json
+"logFormat": "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" $request_time $request_length $upstream_response_time $upstream_addr $host $request_id"
+```
+
+Notes:
+- `$request_time` is logged in seconds; NginxPulse converts it to milliseconds for display.
+- `$request_length` is the total request size, not just the raw request body.
+- If your logs do not contain these variables, the related columns will stay empty, but base analytics still work.
+- In most production setups, `request_body` and response content are **not** logged, and this is still the recommended approach.
+
 `logRegex` example:
 ```json
 "logRegex": "^(?P<ip>\\S+) - (?P<user>\\S+) \\[(?P<time>[^\\]]+)\\] \"(?P<method>\\S+) (?P<url>[^\"]+) HTTP/\\d\\.\\d\" (?P<status>\\d+) (?P<bytes>\\d+) \"(?P<referer>[^\"]*)\" \"(?P<ua>[^\"]*)\"$"
