@@ -88,16 +88,22 @@ type pendingSessionStateUpsert struct {
 }
 
 type logInsertRow struct {
-	ipID         int64
-	pageviewFlag int
-	timestamp    int64
-	method       string
-	urlID        int64
-	statusCode   int
-	bytesSent    int
-	refererID    int64
-	uaID         int64
-	locationID   int64
+	ipID           int64
+	pageviewFlag   int
+	timestamp      int64
+	method         string
+	urlID          int64
+	statusCode     int
+	bytesSent      int
+	requestLength  int
+	requestTimeMs  int64
+	upstreamTimeMs int64
+	upstreamAddr   string
+	host           string
+	requestID      string
+	refererID      int64
+	uaID           int64
+	locationID     int64
 }
 
 const sessionGapSeconds = int64(1800)
@@ -779,7 +785,7 @@ func bulkInsertLogRows(tx *sql.Tx, logTable string, rows []logInsertRow) error {
 	}
 
 	const (
-		columnCount = 10
+		columnCount = 16
 		// PostgreSQL 参数上限是 65535，预留余量避免触边界。
 		maxParams = 60000
 	)
@@ -811,15 +817,16 @@ func bulkInsertLogRowsChunk(tx *sql.Tx, logTable string, rows []logInsertRow) er
 	query.WriteString(logTable)
 	query.WriteString(`" (
         ip_id, pageview_flag, timestamp, method, url_id,
-        status_code, bytes_sent, referer_id, ua_id, location_id
+        status_code, bytes_sent, request_length, request_time_ms, upstream_response_time_ms,
+        upstream_addr, host, request_id, referer_id, ua_id, location_id
     ) VALUES `)
 
-	args := make([]interface{}, 0, len(rows)*10)
+	args := make([]interface{}, 0, len(rows)*16)
 	for i, row := range rows {
 		if i > 0 {
 			query.WriteString(",")
 		}
-		query.WriteString("(?,?,?,?,?,?,?,?,?,?)")
+		query.WriteString("(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
 		args = append(
 			args,
 			row.ipID,
@@ -829,6 +836,12 @@ func bulkInsertLogRowsChunk(tx *sql.Tx, logTable string, rows []logInsertRow) er
 			row.urlID,
 			row.statusCode,
 			row.bytesSent,
+			row.requestLength,
+			row.requestTimeMs,
+			row.upstreamTimeMs,
+			row.upstreamAddr,
+			row.host,
+			row.requestID,
 			row.refererID,
 			row.uaID,
 			row.locationID,

@@ -19,11 +19,6 @@
       "domains": ["localhost"]
     },
     {
-      "name": "神奇的程序员",
-      "logPath": "var/log/kaisir/access.log",
-      "domains": ["kaisir.cn","www.kaisir.cn"]
-    },
-    {
       "name": "sftp站点",
       "logPath": "",
       "domains": [
@@ -52,7 +47,7 @@
   "system": {
     "logDestination": "file",
     "taskInterval": "1m",
-    "logRetentionDays": 30,
+    "logRetentionDays": 100,
     "ipGeoCacheLimit": 1000000,
     "ipGeoApiUrl": "http://ip-api.com/batch",
     "parseBatchSize": 100,

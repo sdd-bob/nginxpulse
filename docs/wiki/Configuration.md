@@ -150,7 +150,7 @@ https://example.com/m/?tabbarBottom=false
 `logFormat` 支持的变量（常用）：
 - `$remote_addr`, `$http_x_forwarded_for`, `$remote_user`, `$remote_port`, `$connection`
 - `$time_local`, `$time_iso8601`
-- `$request`, `$request_method`, `$request_uri`, `$uri`, `$args`, `$query_string`, `$request_length`, `$request_time_msec`
+- `$request`, `$request_method`, `$request_uri`, `$uri`, `$args`, `$query_string`, `$request_length`, `$request_time`, `$request_time_msec`, `$request_id`
 - `$host`, `$http_host`, `$server_name`, `$scheme`
 - `$status`, `$body_bytes_sent`, `$bytes_sent`
 - `$http_referer`, `$http_user_agent`
@@ -165,6 +165,48 @@ https://example.com/m/?tabbarBottom=false
 ```json
 "logFormat": "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" \"$http_x_forwarded_for\" $host $scheme $request_length $remote_port $upstream_addr $upstream_status $upstream_response_time $upstream_connect_time $upstream_header_time"
 ```
+
+#### 轻量访问追踪（请求耗时/请求大小/上游信息）
+如果你希望在 NginxPulse 的“访问明细”页面中看到以下字段：
+- 请求耗时
+- 请求大小
+- 上游耗时
+- 上游地址
+- Host
+- Request ID
+
+则你的 Nginx `access_log` 必须先把这些字段写进日志。NginxPulse **不会主动抓取请求体或响应内容**，只能解析日志里已经存在的字段。
+
+推荐至少增加这些变量：
+- `$request_time`: 请求总耗时
+- `$request_length`: 请求大小（包含请求行、请求头、请求体）
+- `$host`: 请求 Host
+
+如果你用了反向代理 / upstream，推荐再增加：
+- `$upstream_response_time`: 上游响应耗时
+- `$upstream_addr`: 上游地址
+- `$request_id`: 请求唯一 ID（如果你已配置该变量）
+
+推荐 `log_format` 示例：
+```nginx
+log_format nginxpulse_trace '$remote_addr - $remote_user [$time_local] '
+                            '"$request" $status $body_bytes_sent '
+                            '"$http_referer" "$http_user_agent" '
+                            '$request_time $request_length '
+                            '$upstream_response_time $upstream_addr '
+                            '$host $request_id';
+```
+
+如果你在 `websites[].logFormat` 中手动填写，也建议与上面的字段保持一致，例如：
+```json
+"logFormat": "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" $request_time $request_length $upstream_response_time $upstream_addr $host $request_id"
+```
+
+注意事项：
+- `$request_time` 单位是秒，NginxPulse 会自动转换为毫秒展示。
+- `$request_length` 是请求总大小，不等于纯 `request_body`。
+- 若日志中没有这些变量，对应字段会显示为空，不影响基础访问统计。
+- 大多数线上环境**不会**记录 `request_body` 或响应内容；当前也不建议这样做。
 
 `logRegex` 示例：
 ```json

@@ -451,16 +451,22 @@ func (r *Repository) batchInsertLogsForWebsiteOnce(websiteID string, logs []Ngin
 
 		ts := log.Timestamp.Unix()
 		logRows = append(logRows, logInsertRow{
-			ipID:         ipID,
-			pageviewFlag: log.PageviewFlag,
-			timestamp:    ts,
-			method:       log.Method,
-			urlID:        urlID,
-			statusCode:   log.Status,
-			bytesSent:    log.BytesSent,
-			refererID:    refererID,
-			uaID:         uaID,
-			locationID:   locationID,
+			ipID:           ipID,
+			pageviewFlag:   log.PageviewFlag,
+			timestamp:      ts,
+			method:         log.Method,
+			urlID:          urlID,
+			statusCode:     log.Status,
+			bytesSent:      log.BytesSent,
+			requestLength:  log.RequestLength,
+			requestTimeMs:  log.RequestTimeMs,
+			upstreamTimeMs: log.UpstreamTimeMs,
+			upstreamAddr:   log.UpstreamAddr,
+			host:           log.Host,
+			requestID:      log.RequestID,
+			refererID:      refererID,
+			uaID:           uaID,
+			locationID:     locationID,
 		})
 
 		if log.PageviewFlag == 1 {

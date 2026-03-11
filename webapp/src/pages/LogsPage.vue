@@ -235,7 +235,7 @@
           :rowHover="true"
           :stripedRows="true"
           :emptyMessage="t('logs.empty')"
-          :tableStyle="{ minWidth: '1200px' }"
+          :tableStyle="{ minWidth: '1460px' }"
           @row-click="openLogDetail"
         >
           <Column field="time" :header="t('logs.time')" :style="{ width: '180px' }">
@@ -266,6 +266,16 @@
           <Column field="trafficText" :header="t('common.traffic')" :style="{ width: '130px' }">
             <template #body="{ data }">
               <span :title="data.trafficTitle">{{ data.trafficText }}</span>
+            </template>
+          </Column>
+          <Column field="requestTimeText" :header="t('logs.duration')" :style="{ width: '130px' }">
+            <template #body="{ data }">
+              <span :title="data.requestTimeTitle">{{ data.requestTimeText }}</span>
+            </template>
+          </Column>
+          <Column field="requestSizeText" :header="t('logs.requestSize')" :style="{ width: '130px' }">
+            <template #body="{ data }">
+              <span :title="data.requestSizeTitle">{{ data.requestSizeText }}</span>
             </template>
           </Column>
           <Column field="referer" :header="t('logs.source')" :style="{ width: '220px' }">
@@ -333,6 +343,36 @@
           <span class="log-detail-value" :title="selectedLog?.trafficTitle">
             {{ selectedLog?.trafficText || t('common.none') }}
           </span>
+        </div>
+        <div class="log-detail-item">
+          <span class="log-detail-label">{{ t('logs.duration') }}</span>
+          <span class="log-detail-value" :title="selectedLog?.requestTimeTitle">
+            {{ selectedLog?.requestTimeText || t('common.none') }}
+          </span>
+        </div>
+        <div class="log-detail-item">
+          <span class="log-detail-label">{{ t('logs.requestSize') }}</span>
+          <span class="log-detail-value" :title="selectedLog?.requestSizeTitle">
+            {{ selectedLog?.requestSizeText || t('common.none') }}
+          </span>
+        </div>
+        <div class="log-detail-item">
+          <span class="log-detail-label">{{ t('logs.upstreamDuration') }}</span>
+          <span class="log-detail-value" :title="selectedLog?.upstreamTimeTitle">
+            {{ selectedLog?.upstreamTimeText || t('common.none') }}
+          </span>
+        </div>
+        <div class="log-detail-item">
+          <span class="log-detail-label">{{ t('logs.host') }}</span>
+          <span class="log-detail-value">{{ selectedLog?.host || t('common.none') }}</span>
+        </div>
+        <div class="log-detail-item">
+          <span class="log-detail-label">{{ t('logs.requestId') }}</span>
+          <span class="log-detail-value">{{ selectedLog?.requestId || t('common.none') }}</span>
+        </div>
+        <div class="log-detail-item">
+          <span class="log-detail-label">{{ t('logs.upstreamAddr') }}</span>
+          <span class="log-detail-value">{{ selectedLog?.upstreamAddr || t('common.none') }}</span>
         </div>
         <div class="log-detail-item">
           <span class="log-detail-label">{{ t('logs.source') }}</span>
@@ -583,6 +623,15 @@ type LogRow = {
   statusCode: number | string;
   trafficText: string;
   trafficTitle: string;
+  requestTimeText: string;
+  requestTimeTitle: string;
+  requestSizeText: string;
+  requestSizeTitle: string;
+  upstreamTimeText: string;
+  upstreamTimeTitle: string;
+  host: string;
+  requestId: string;
+  upstreamAddr: string;
   referer: string;
   browser: string;
   os: string;
@@ -659,6 +708,9 @@ const sortFieldOptions = computed(() => [
   { value: 'url', label: t('common.url') },
   { value: 'status_code', label: t('common.status') },
   { value: 'bytes_sent', label: t('common.traffic') },
+  { value: 'request_time_ms', label: t('logs.duration') },
+  { value: 'request_length', label: t('logs.requestSize') },
+  { value: 'upstream_response_time_ms', label: t('logs.upstreamDuration') },
 ]);
 const sortOrderOptions = computed(() => [
   { value: 'desc', label: t('logs.sortDesc') },
@@ -879,6 +931,18 @@ function formatDurationSeconds(seconds: number) {
     return t('overview.durationMinutesSeconds', { minutes, seconds: secs });
   }
   return t('overview.durationSeconds', { seconds: secs });
+}
+
+function formatMilliseconds(value: unknown) {
+  const normalized = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    return t('common.none');
+  }
+  return `${Math.round(normalized)} ms`;
+}
+
+function formatBytesTitle(value: number) {
+  return t('common.bytes', { value: n(value) });
 }
 
 function parseStatusFilter(value: string) {
@@ -1462,8 +1526,14 @@ const logs = computed(() => {
     const requestText = `${method} ${url}`.trim() || emptyLabel;
     const statusCode = log.status_code ?? emptyLabel;
     const bytesSent = Number(log.bytes_sent) || 0;
+    const requestLength = Number(log.request_length) || 0;
+    const requestTimeMs = Number(log.request_time_ms) || 0;
+    const upstreamTimeMs = Number(log.upstream_response_time_ms) || 0;
     const refererRaw = log.referer ?? '';
     const referer = formatRefererLabel(refererRaw, currentLocale.value, t) || emptyLabel;
+    const host = String(log.host || '').trim() || emptyLabel;
+    const requestId = String(log.request_id || '').trim() || emptyLabel;
+    const upstreamAddr = String(log.upstream_addr || '').trim() || emptyLabel;
     const browserRaw = log.user_browser ?? '';
     const browser = formatBrowserLabel(browserRaw, t) || emptyLabel;
     const osRaw = log.user_os ?? '';
@@ -1478,7 +1548,16 @@ const logs = computed(() => {
       request: requestText,
       statusCode,
       trafficText: formatTraffic(bytesSent),
-      trafficTitle: t('common.bytes', { value: n(bytesSent) }),
+      trafficTitle: formatBytesTitle(bytesSent),
+      requestTimeText: formatMilliseconds(requestTimeMs),
+      requestTimeTitle: requestTimeMs > 0 ? `${requestTimeMs} ms` : emptyLabel,
+      requestSizeText: requestLength > 0 ? formatTraffic(requestLength) : emptyLabel,
+      requestSizeTitle: requestLength > 0 ? formatBytesTitle(requestLength) : emptyLabel,
+      upstreamTimeText: formatMilliseconds(upstreamTimeMs),
+      upstreamTimeTitle: upstreamTimeMs > 0 ? `${upstreamTimeMs} ms` : emptyLabel,
+      host,
+      requestId,
+      upstreamAddr,
       referer,
       browser,
       os,

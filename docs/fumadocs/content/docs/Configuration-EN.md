@@ -123,7 +123,7 @@ Named fields needed by the parser (aliases allowed):
 Supported `logFormat` variables (common):
 - `$remote_addr`, `$http_x_forwarded_for`, `$remote_user`, `$remote_port`, `$connection`
 - `$time_local`, `$time_iso8601`
-- `$request`, `$request_method`, `$request_uri`, `$uri`, `$args`, `$query_string`, `$request_length`, `$request_time_msec`
+- `$request`, `$request_method`, `$request_uri`, `$uri`, `$args`, `$query_string`, `$request_length`, `$request_time`, `$request_time_msec`, `$request_id`
 - `$host`, `$http_host`, `$server_name`, `$scheme`
 - `$status`, `$body_bytes_sent`, `$bytes_sent`
 - `$http_referer`, `$http_user_agent`

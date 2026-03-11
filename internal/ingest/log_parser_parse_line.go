@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -124,10 +125,30 @@ func (p *LogParser) parseRegexLogLine(parser *logLineParser, line string) (*stor
 		}
 	}
 
+	requestLength := parseIntField(extractField(matches, parser.indexMap, requestLengthAliases))
+	requestTimeMs := extractRequestTimeMs(matches, parser.indexMap)
+	upstreamTimeMs := parseMillisecondsField(extractField(matches, parser.indexMap, upstreamTimeAliases), false)
+	upstreamAddr := normalizeOptionalField(extractField(matches, parser.indexMap, upstreamAddrAliases))
+	host := normalizeOptionalField(extractField(matches, parser.indexMap, hostAliases))
+	requestID := normalizeOptionalField(extractField(matches, parser.indexMap, requestIDAliases))
 	referPath := extractField(matches, parser.indexMap, refererAliases)
-
 	userAgent := extractField(matches, parser.indexMap, userAgentAliases)
-	return p.buildLogRecord(ip, method, urlValue, referPath, userAgent, statusCode, bytesSent, timestamp)
+	return p.buildLogRecord(logRecordParams{
+		ip:             ip,
+		method:         method,
+		urlValue:       urlValue,
+		referer:        referPath,
+		userAgent:      userAgent,
+		statusCode:     statusCode,
+		bytesSent:      bytesSent,
+		requestLength:  requestLength,
+		requestTimeMs:  requestTimeMs,
+		upstreamTimeMs: upstreamTimeMs,
+		upstreamAddr:   upstreamAddr,
+		host:           host,
+		requestID:      requestID,
+		timestamp:      timestamp,
+	})
 }
 
 func (p *LogParser) parseCaddyJSONLine(line string, parser *logLineParser) (*store.NginxLogRecord, error) {
@@ -159,6 +180,12 @@ func (p *LogParser) parseCaddyJSONLine(line string, parser *logLineParser) (*sto
 	}
 
 	bytesSent, _ := getInt(payload, "size")
+	requestLength, _ := getInt(payload, "request_length")
+	requestTimeMs := parseJSONDurationMs(payload)
+	upstreamTimeMs := parseMillisecondsField(getString(payload, "upstream_duration"), false)
+	upstreamAddr := normalizeOptionalField(getString(payload, "upstream"))
+	host := normalizeOptionalField(getString(request, "host"))
+	requestID := normalizeOptionalField(getString(payload, "request_id"))
 	referPath := getHeader(headers, "Referer")
 	userAgent := getHeader(headers, "User-Agent")
 
@@ -167,12 +194,50 @@ func (p *LogParser) parseCaddyJSONLine(line string, parser *logLineParser) (*sto
 		return nil, err
 	}
 
-	return p.buildLogRecord(ip, method, urlValue, referPath, userAgent, statusCode, bytesSent, timestamp)
+	return p.buildLogRecord(logRecordParams{
+		ip:             ip,
+		method:         method,
+		urlValue:       urlValue,
+		referer:        referPath,
+		userAgent:      userAgent,
+		statusCode:     statusCode,
+		bytesSent:      bytesSent,
+		requestLength:  requestLength,
+		requestTimeMs:  requestTimeMs,
+		upstreamTimeMs: upstreamTimeMs,
+		upstreamAddr:   upstreamAddr,
+		host:           host,
+		requestID:      requestID,
+		timestamp:      timestamp,
+	})
 }
 
-func (p *LogParser) buildLogRecord(
-	ip, method, urlValue, referer, userAgent string,
-	statusCode, bytesSent int, timestamp time.Time) (*store.NginxLogRecord, error) {
+type logRecordParams struct {
+	ip             string
+	method         string
+	urlValue       string
+	referer        string
+	userAgent      string
+	statusCode     int
+	bytesSent      int
+	requestLength  int
+	requestTimeMs  int64
+	upstreamTimeMs int64
+	upstreamAddr   string
+	host           string
+	requestID      string
+	timestamp      time.Time
+}
+
+func (p *LogParser) buildLogRecord(params logRecordParams) (*store.NginxLogRecord, error) {
+	ip := params.ip
+	method := params.method
+	urlValue := params.urlValue
+	referer := params.referer
+	userAgent := params.userAgent
+	statusCode := params.statusCode
+	bytesSent := params.bytesSent
+	timestamp := params.timestamp
 
 	ip = normalizeIP(ip)
 	if ip == "" || method == "" || urlValue == "" {
@@ -215,6 +280,12 @@ func (p *LogParser) buildLogRecord(
 		Url:              decodedPath,
 		Status:           statusCode,
 		BytesSent:        bytesSent,
+		RequestLength:    params.requestLength,
+		RequestTimeMs:    params.requestTimeMs,
+		UpstreamTimeMs:   params.upstreamTimeMs,
+		UpstreamAddr:     params.upstreamAddr,
+		Host:             params.host,
+		RequestID:        params.requestID,
 		Referer:          referPath,
 		UserBrowser:      browser,
 		UserOs:           os,
@@ -323,6 +394,158 @@ func getInt(source map[string]interface{}, key string) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+var durationUnitPattern = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)(ns|us|µs|μs|ms|s|m|h)`)
+
+func parseJSONDurationMs(payload map[string]interface{}) int64 {
+	if payload == nil {
+		return 0
+	}
+	if raw, ok := payload["duration_ms"]; ok {
+		if value, ok := parseDurationValueMs(raw, true); ok {
+			return value
+		}
+	}
+	if raw, ok := payload["duration"]; ok {
+		if value, ok := parseDurationValueMs(raw, false); ok {
+			return value
+		}
+	}
+	if raw, ok := payload["duration_ns"]; ok {
+		if value, ok := parseDurationValueMs(raw, false); ok {
+			return value
+		}
+	}
+	return 0
+}
+
+func extractRequestTimeMs(matches []string, indexMap map[string]int) int64 {
+	if value := extractField(matches, indexMap, []string{"request_time_ms", "request_time_msec", "duration_ms"}); value != "" {
+		return parseMillisecondsField(value, true)
+	}
+	return parseMillisecondsField(extractField(matches, indexMap, []string{"request_time", "duration"}), false)
+}
+
+func parseIntField(raw string) int {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "-" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	return parsed
+}
+
+func parseMillisecondsField(raw string, assumeMilliseconds bool) int64 {
+	value, ok := parseDurationValueMs(raw, assumeMilliseconds)
+	if !ok || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func parseDurationValueMs(raw interface{}, assumeMilliseconds bool) (int64, bool) {
+	switch typed := raw.(type) {
+	case json.Number:
+		if parsed, err := typed.Float64(); err == nil {
+			return scaleFloatDuration(parsed, assumeMilliseconds), true
+		}
+	case float64:
+		return scaleFloatDuration(typed, assumeMilliseconds), true
+	case float32:
+		return scaleFloatDuration(float64(typed), assumeMilliseconds), true
+	case int:
+		return scaleFloatDuration(float64(typed), assumeMilliseconds), true
+	case int64:
+		return scaleFloatDuration(float64(typed), assumeMilliseconds), true
+	case string:
+		return parseDurationStringMs(typed, assumeMilliseconds)
+	}
+	return 0, false
+}
+
+func scaleFloatDuration(value float64, assumeMilliseconds bool) int64 {
+	if assumeMilliseconds {
+		if value < 0 {
+			return 0
+		}
+		return int64(value)
+	}
+	if value > 1e9 {
+		return int64(value / 1e6)
+	}
+	if value < 0 {
+		return 0
+	}
+	return int64(value * 1000)
+}
+
+func parseDurationStringMs(raw string, assumeMilliseconds bool) (int64, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "-" {
+		return 0, false
+	}
+	if strings.Contains(trimmed, ",") {
+		parts := strings.Split(trimmed, ",")
+		var maxValue int64
+		found := false
+		for _, part := range parts {
+			if value, ok := parseDurationStringMs(part, assumeMilliseconds); ok {
+				if !found || value > maxValue {
+					maxValue = value
+				}
+				found = true
+			}
+		}
+		return maxValue, found
+	}
+	if len(durationUnitPattern.FindAllString(trimmed, -1)) > 0 {
+		var total time.Duration
+		matches := durationUnitPattern.FindAllStringSubmatch(trimmed, -1)
+		if strings.Join(durationUnitPattern.FindAllString(trimmed, -1), "") != trimmed {
+			return 0, false
+		}
+		for _, match := range matches {
+			value, err := strconv.ParseFloat(match[1], 64)
+			if err != nil {
+				return 0, false
+			}
+			unit := strings.ToLower(match[2])
+			switch unit {
+			case "ns":
+				total += time.Duration(value)
+			case "us", "µs", "μs":
+				total += time.Duration(value * float64(time.Microsecond))
+			case "ms":
+				total += time.Duration(value * float64(time.Millisecond))
+			case "s":
+				total += time.Duration(value * float64(time.Second))
+			case "m":
+				total += time.Duration(value * float64(time.Minute))
+			case "h":
+				total += time.Duration(value * float64(time.Hour))
+			default:
+				return 0, false
+			}
+		}
+		return total.Milliseconds(), true
+	}
+	value, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil {
+		return 0, false
+	}
+	return scaleFloatDuration(value, assumeMilliseconds), true
+}
+
+func normalizeOptionalField(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "-" {
+		return ""
+	}
+	return trimmed
 }
 
 func getHeader(headers map[string]interface{}, name string) string {

@@ -50,16 +50,22 @@ const (
 )
 
 var (
-	ipAliases        = []string{"ip", "remote_addr", "client_ip", "http_x_forwarded_for"}
-	timeAliases      = []string{"time", "time_local", "time_iso8601"}
-	methodAliases    = []string{"method", "request_method"}
-	urlAliases       = []string{"url", "request_uri", "uri", "path"}
-	queryAliases     = []string{"query", "args", "query_string", "cs_uri_query"}
-	statusAliases    = []string{"status"}
-	bytesAliases     = []string{"bytes", "body_bytes_sent", "bytes_sent"}
-	refererAliases   = []string{"referer", "http_referer"}
-	userAgentAliases = []string{"ua", "user_agent", "http_user_agent"}
-	requestAliases   = []string{"request", "request_line"}
+	ipAliases            = []string{"ip", "remote_addr", "client_ip", "http_x_forwarded_for"}
+	timeAliases          = []string{"time", "time_local", "time_iso8601"}
+	methodAliases        = []string{"method", "request_method"}
+	urlAliases           = []string{"url", "request_uri", "uri", "path"}
+	queryAliases         = []string{"query", "args", "query_string", "cs_uri_query"}
+	statusAliases        = []string{"status"}
+	bytesAliases         = []string{"bytes", "body_bytes_sent", "bytes_sent"}
+	refererAliases       = []string{"referer", "http_referer"}
+	userAgentAliases     = []string{"ua", "user_agent", "http_user_agent"}
+	requestAliases       = []string{"request", "request_line"}
+	requestLengthAliases = []string{"request_length", "bytes_received"}
+	requestTimeAliases   = []string{"request_time_ms", "request_time_msec", "request_time", "duration_ms", "duration"}
+	upstreamTimeAliases  = []string{"upstream_response_time", "upstream_time"}
+	upstreamAddrAliases  = []string{"upstream_addr", "upstream", "upstream_host"}
+	hostAliases          = []string{"host", "http_host", "server_name", "authority"}
+	requestIDAliases     = []string{"request_id", "req_id", "x_request_id"}
 )
 
 var ErrParsingInProgress = errors.New("日志解析中，请稍后重试")

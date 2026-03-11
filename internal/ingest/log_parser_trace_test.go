@@ -1,0 +1,85 @@
+package ingest
+
+import (
+	"regexp"
+	"testing"
+	"time"
+
+	"github.com/likaia/nginxpulse/internal/config"
+)
+
+func TestNginxIngressParserParsesTraceFields(t *testing.T) {
+	parser, err := newLogLineParser(config.WebsiteConfig{LogType: "nginx-ingress"}, nil)
+	if err != nil {
+		t.Fatalf("newLogLineParser(nginx-ingress) error: %v", err)
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	line := `203.0.113.10 - - [` + now.Format(defaultNginxTimeLayout) + `] "GET /orders?id=42 HTTP/2.0" 200 512 "-" "curl/8.0.1" 128 0.245 [backend] [alt] 10.0.0.2:8080 512 0.200 200 req-123`
+
+	p := &LogParser{retentionDays: 30}
+	record, err := p.parseRegexLogLine(parser, line)
+	if err != nil {
+		t.Fatalf("parseRegexLogLine error: %v", err)
+	}
+
+	if record.RequestLength != 128 {
+		t.Fatalf("unexpected request_length: %d", record.RequestLength)
+	}
+	if record.RequestTimeMs != 245 {
+		t.Fatalf("unexpected request_time_ms: %d", record.RequestTimeMs)
+	}
+	if record.UpstreamTimeMs != 200 {
+		t.Fatalf("unexpected upstream_response_time_ms: %d", record.UpstreamTimeMs)
+	}
+	if record.UpstreamAddr != "10.0.0.2:8080" {
+		t.Fatalf("unexpected upstream_addr: %q", record.UpstreamAddr)
+	}
+	if record.RequestID != "req-123" {
+		t.Fatalf("unexpected request_id: %q", record.RequestID)
+	}
+}
+
+func TestBuildRegexFromFormatSupportsRequestTimeAndRequestID(t *testing.T) {
+	pattern, err := buildRegexFromFormat(`$remote_addr [$time_local] "$request" $status $body_bytes_sent $request_time $request_length $request_id`)
+	if err != nil {
+		t.Fatalf("buildRegexFromFormat error: %v", err)
+	}
+	parser := &logLineParser{
+		regex:      mustCompileRegex(t, pattern),
+		indexMap:   map[string]int{},
+		timeLayout: defaultNginxTimeLayout,
+		parseType:  parseTypeRegex,
+	}
+	for i, name := range parser.regex.SubexpNames() {
+		if name != "" {
+			parser.indexMap[name] = i
+		}
+	}
+
+	now := time.Now().UTC().Truncate(time.Second)
+	line := `203.0.113.10 [` + now.Format(defaultNginxTimeLayout) + `] "GET /health HTTP/1.1" 200 12 0.123 64 req-789`
+	p := &LogParser{retentionDays: 30}
+	record, err := p.parseRegexLogLine(parser, line)
+	if err != nil {
+		t.Fatalf("parseRegexLogLine error: %v", err)
+	}
+	if record.RequestTimeMs != 123 {
+		t.Fatalf("unexpected request_time_ms: %d", record.RequestTimeMs)
+	}
+	if record.RequestLength != 64 {
+		t.Fatalf("unexpected request_length: %d", record.RequestLength)
+	}
+	if record.RequestID != "req-789" {
+		t.Fatalf("unexpected request_id: %q", record.RequestID)
+	}
+}
+
+func mustCompileRegex(t *testing.T, pattern string) *regexp.Regexp {
+	t.Helper()
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		t.Fatalf("regexp.Compile error: %v", err)
+	}
+	return regex
+}

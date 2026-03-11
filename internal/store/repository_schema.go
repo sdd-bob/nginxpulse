@@ -176,6 +176,9 @@ func (r *Repository) ensureWebsiteSchema(websiteID string) error {
 	if err := createDimTables(r.db, websiteID); err != nil {
 		return err
 	}
+	if err := r.ensureLogTraceColumns(logTable); err != nil {
+		return err
+	}
 	if err := createLogIndexes(r.db, websiteID); err != nil {
 		return err
 	}
@@ -444,6 +447,12 @@ func createLogTable(execer sqlExecer, tableName string) error {
             url_id BIGINT NOT NULL,
             status_code INT NOT NULL,
             bytes_sent BIGINT NOT NULL,
+            request_length BIGINT NOT NULL DEFAULT 0,
+            request_time_ms BIGINT NOT NULL DEFAULT 0,
+            upstream_response_time_ms BIGINT NOT NULL DEFAULT 0,
+            upstream_addr TEXT NOT NULL DEFAULT '',
+            host TEXT NOT NULL DEFAULT '',
+            request_id TEXT NOT NULL DEFAULT '',
             referer_id BIGINT NOT NULL,
             ua_id BIGINT NOT NULL,
             location_id BIGINT NOT NULL,
@@ -460,6 +469,38 @@ func createLogTable(execer sqlExecer, tableName string) error {
 	)
 	_, err = execer.Exec(partition)
 	return err
+}
+
+func (r *Repository) ensureLogTraceColumns(tableName string) error {
+	type columnSpec struct {
+		name       string
+		definition string
+	}
+	columns := []columnSpec{
+		{name: "request_length", definition: `BIGINT NOT NULL DEFAULT 0`},
+		{name: "request_time_ms", definition: `BIGINT NOT NULL DEFAULT 0`},
+		{name: "upstream_response_time_ms", definition: `BIGINT NOT NULL DEFAULT 0`},
+		{name: "upstream_addr", definition: `TEXT NOT NULL DEFAULT ''`},
+		{name: "host", definition: `TEXT NOT NULL DEFAULT ''`},
+		{name: "request_id", definition: `TEXT NOT NULL DEFAULT ''`},
+	}
+
+	for _, column := range columns {
+		hasColumn, err := r.tableHasColumn(tableName, column.name)
+		if err != nil {
+			return err
+		}
+		if hasColumn {
+			continue
+		}
+		if _, err := r.db.Exec(fmt.Sprintf(
+			`ALTER TABLE "%s" ADD COLUMN %s %s`,
+			tableName, column.name, column.definition,
+		)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func createLogIndexes(execer sqlExecer, websiteID string) error {

@@ -1234,6 +1234,8 @@ function tokenRegexForVar(name: string, used: Set<string>, quoted: boolean) {
       return addGroup('remote_port', '\\d+');
     case 'connection':
       return addGroup('connection', '\\d+');
+    case 'request_time':
+      return addGroup('request_time', '\\d+(?:\\.\\d+)?');
     case 'request_time_msec':
       return addGroup('request_time_msec', '\\d+(?:\\.\\d+)?');
     case 'upstream_addr':
@@ -1246,6 +1248,8 @@ function tokenRegexForVar(name: string, used: Set<string>, quoted: boolean) {
       return addGroup('upstream_connect_time', commaListPattern);
     case 'upstream_header_time':
       return addGroup('upstream_header_time', commaListPattern);
+    case 'request_id':
+      return addGroup('request_id', requiredTokenPattern);
     default:
       return optionalTokenPattern;
   }

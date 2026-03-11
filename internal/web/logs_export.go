@@ -19,7 +19,7 @@ const (
 	logsExportSheetName = "Logs"
 	logsHeaderRow       = 3
 	logsDataStartRow    = 4
-	logsLastColumn      = "L"
+	logsLastColumn      = "R"
 )
 
 var ErrExportCanceled = fmt.Errorf("export canceled")
@@ -134,7 +134,7 @@ func exportLogsXLSXWithProgress(
 				}
 			}
 			if log.PageviewFlag {
-				pvCell := fmt.Sprintf("L%d", currentRow)
+				pvCell := fmt.Sprintf("R%d", currentRow)
 				if err := file.SetCellStyle(logsExportSheetName, pvCell, pvCell, styles.pvYes); err != nil {
 					return err
 				}
@@ -229,6 +229,24 @@ func setupLogsExportSheet(file *excelize.File, query analytics.StatsQuery, lang 
 		return err
 	}
 	if err := file.SetColWidth(logsExportSheetName, "L", "L", 10); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "M", "M", 26); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "N", "N", 24); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "O", "O", 36); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "P", "P", 20); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "Q", "Q", 16); err != nil {
+		return err
+	}
+	if err := file.SetColWidth(logsExportSheetName, "R", "R", 10); err != nil {
 		return err
 	}
 
@@ -401,6 +419,21 @@ func buildLogExportRow(log analytics.LogEntry, lang string) []string {
 		device = "-"
 	}
 
+	host := strings.TrimSpace(log.Host)
+	if host == "" {
+		host = "-"
+	}
+
+	requestID := strings.TrimSpace(log.RequestID)
+	if requestID == "" {
+		requestID = "-"
+	}
+
+	upstreamAddr := strings.TrimSpace(log.UpstreamAddr)
+	if upstreamAddr == "" {
+		upstreamAddr = "-"
+	}
+
 	pvText := "否"
 	if lang == config.EnglishLanguage {
 		pvText = "No"
@@ -425,6 +458,12 @@ func buildLogExportRow(log analytics.LogEntry, lang string) []string {
 		strconv.Itoa(log.StatusCode),
 		strconv.FormatInt(int64(log.BytesSent), 10),
 		formatTraffic(int64(log.BytesSent)),
+		strconv.Itoa(log.RequestLength),
+		formatMilliseconds(log.RequestTimeMs),
+		formatMilliseconds(log.UpstreamResponseTimeMs),
+		host,
+		requestID,
+		upstreamAddr,
 		referer,
 		browser,
 		os,
@@ -439,6 +478,10 @@ func buildLogExportRowValues(log analytics.LogEntry, lang string) []interface{} 
 	for idx, value := range row {
 		if idx == 5 {
 			values = append(values, int64(log.BytesSent))
+			continue
+		}
+		if idx == 7 {
+			values = append(values, int64(log.RequestLength))
 			continue
 		}
 		values = append(values, value)
@@ -456,6 +499,12 @@ func logsExportHeaders(lang string) []string {
 			"Status",
 			"Bytes (Raw)",
 			"Traffic",
+			"Request Size",
+			"Duration",
+			"Upstream Duration",
+			"Host",
+			"Request ID",
+			"Upstream",
 			"Referer",
 			"Browser",
 			"OS",
@@ -471,12 +520,25 @@ func logsExportHeaders(lang string) []string {
 		"状态码",
 		"流量(字节)",
 		"流量(可读)",
+		"请求大小",
+		"请求耗时",
+		"上游耗时",
+		"Host",
+		"请求ID",
+		"上游地址",
 		"来源",
 		"浏览器",
 		"系统",
 		"设备",
 		"PV",
 	}
+}
+
+func formatMilliseconds(value int64) string {
+	if value <= 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%d ms", value)
 }
 
 func formatTraffic(bytes int64) string {

@@ -24,6 +24,12 @@ type NginxLogRecord struct {
 	Url              string    `json:"url"`
 	Status           int       `json:"status"`
 	BytesSent        int       `json:"bytes_sent"`
+	RequestLength    int       `json:"request_length"`
+	RequestTimeMs    int64     `json:"request_time_ms"`
+	UpstreamTimeMs   int64     `json:"upstream_response_time_ms"`
+	UpstreamAddr     string    `json:"upstream_addr"`
+	Host             string    `json:"host"`
+	RequestID        string    `json:"request_id"`
 	Referer          string    `json:"referer"`
 	UserBrowser      string    `json:"user_browser"`
 	UserOs           string    `json:"user_os"`
@@ -67,6 +73,9 @@ const (
 	maxURLBytes     = 2000
 	maxRefererBytes = 2000
 	maxUABytes      = 256
+	maxHostBytes    = 255
+	maxRequestID    = 256
+	maxUpstreamAddr = 512
 )
 
 func truncateUTF8Bytes(s string, maxBytes int) string {
@@ -91,6 +100,9 @@ func sanitizeLogRecord(log NginxLogRecord) NginxLogRecord {
 	log.IP = sanitizeUTF8(log.IP)
 	log.Method = sanitizeUTF8(log.Method)
 	log.Url = sanitizeAndTruncate(log.Url, maxURLBytes)
+	log.UpstreamAddr = sanitizeAndTruncate(log.UpstreamAddr, maxUpstreamAddr)
+	log.Host = sanitizeAndTruncate(log.Host, maxHostBytes)
+	log.RequestID = sanitizeAndTruncate(log.RequestID, maxRequestID)
 	log.Referer = sanitizeAndTruncate(log.Referer, maxRefererBytes)
 	log.UserBrowser = sanitizeAndTruncate(log.UserBrowser, maxUABytes)
 	log.UserOs = sanitizeAndTruncate(log.UserOs, maxUABytes)
