@@ -600,21 +600,31 @@
             <div class="reparse-range-grid">
               <div class="reparse-range-field">
                 <label for="reparse-range-start">{{ t('logs.reparseRangeStart') }}</label>
-                <input
+                <DatePicker
                   id="reparse-range-start"
-                  v-model="reparseRangeStart"
-                  class="reparse-range-input"
-                  type="datetime-local"
+                  v-model="reparseRangeStartDate"
+                  class="reparse-range-picker"
+                  dateFormat="yy-mm-dd"
+                  showTime
+                  hourFormat="24"
+                  showButtonBar
+                  :showClear="true"
+                  :manualInput="false"
                   :disabled="reparseLoading"
                 />
               </div>
               <div class="reparse-range-field">
                 <label for="reparse-range-end">{{ t('logs.reparseRangeEnd') }}</label>
-                <input
+                <DatePicker
                   id="reparse-range-end"
-                  v-model="reparseRangeEnd"
-                  class="reparse-range-input"
-                  type="datetime-local"
+                  v-model="reparseRangeEndDate"
+                  class="reparse-range-picker"
+                  dateFormat="yy-mm-dd"
+                  showTime
+                  hourFormat="24"
+                  showButtonBar
+                  :showClear="true"
+                  :manualInput="false"
                   :disabled="reparseLoading"
                 />
               </div>
@@ -826,8 +836,8 @@ const reparseLoading = ref(false);
 const reparseError = ref('');
 const reparseDialogMode = ref<'confirm' | 'blocked'>('confirm');
 const reparseMode = ref<'full' | 'range'>('full');
-const reparseRangeStart = ref('');
-const reparseRangeEnd = ref('');
+const reparseRangeStartDate = ref<Date | null>(null);
+const reparseRangeEndDate = ref<Date | null>(null);
 const reparseDialogBlockedMessageKey = ref<'logs.reparseBlocked' | 'logs.exportBlocked'>(
   'logs.reparseBlocked'
 );
@@ -1257,31 +1267,6 @@ function formatDateTimeValue(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
     date.getHours()
   )}:${pad(date.getMinutes())}`;
-}
-
-function formatDateTimeLocalValue(date: Date) {
-  return formatDateTimeValue(date).replace(' ', 'T');
-}
-
-function isDateTimeLocalValue(value: string) {
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value || '');
-}
-
-function toDateTimeLocalValue(value: string) {
-  if (isDateTimeLocalValue(value)) {
-    return value;
-  }
-  if (isDateTimeValue(value)) {
-    return value.replace(' ', 'T');
-  }
-  return '';
-}
-
-function fromDateTimeLocalValue(value: string) {
-  if (!isDateTimeLocalValue(value)) {
-    return '';
-  }
-  return value.replace('T', ' ');
 }
 
 function parseDateFromTime(value: string) {
@@ -2202,8 +2187,8 @@ function openReparseDialog() {
   }
   reparseMode.value = 'full';
   const now = new Date();
-  reparseRangeStart.value = toDateTimeLocalValue(timeStart.value) || formatDateTimeLocalValue(startOfDay(now));
-  reparseRangeEnd.value = toDateTimeLocalValue(timeEnd.value) || formatDateTimeLocalValue(now);
+  reparseRangeStartDate.value = parseDateFromTime(timeStart.value) || startOfDay(now);
+  reparseRangeEndDate.value = parseDateFromTime(timeEnd.value) || now;
   reparseDialogMode.value = 'confirm';
   reparseDialogVisible.value = true;
 }
@@ -2270,8 +2255,8 @@ async function confirmReparse() {
   reparseError.value = '';
   try {
     if (reparseMode.value === 'range') {
-      const startAt = fromDateTimeLocalValue(reparseRangeStart.value);
-      const endAt = fromDateTimeLocalValue(reparseRangeEnd.value);
+      const startAt = reparseRangeStartDate.value ? formatDateTimeValue(reparseRangeStartDate.value) : '';
+      const endAt = reparseRangeEndDate.value ? formatDateTimeValue(reparseRangeEndDate.value) : '';
       if (!startAt || !endAt) {
         reparseError.value = t('logs.reparseRangeRequired');
         return;
@@ -2999,19 +2984,13 @@ function nextPage() {
   color: var(--muted);
 }
 
-.reparse-range-input {
+.reparse-range-picker {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--text);
 }
 
-.reparse-range-input:focus {
-  outline: none;
-  border-color: rgba(var(--primary-color-rgb), 0.55);
-  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb), 0.14);
+.reparse-range-picker :deep(.p-inputtext) {
+  width: 100%;
+  font-size: 13px;
 }
 
 .export-progress {
