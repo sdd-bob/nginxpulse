@@ -557,8 +557,10 @@
       modal
       :closable="!reparseLoading"
       :dismissableMask="!reparseLoading"
-      class="reparse-dialog"
+      class="reparse-dialog logs-reparse-dialog"
       :header="reparseDialogTitle"
+      :style="{ width: '640px', maxWidth: 'calc(100vw - 32px)' }"
+      :breakpoints="{ '768px': 'calc(100vw - 24px)' }"
     >
       <div class="reparse-dialog-body">
         <template v-if="reparseDialogMode === 'blocked'">
@@ -2929,9 +2931,14 @@ function nextPage() {
   padding-top: 8px;
 }
 
+.logs-reparse-dialog :deep(.p-dialog-content) {
+  min-height: 280px;
+}
+
 .reparse-dialog-body {
   display: flex;
   flex-direction: column;
+  min-height: 100%;
   gap: 10px;
   font-size: 14px;
   color: var(--text);
