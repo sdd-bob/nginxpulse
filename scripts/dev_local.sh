@@ -9,6 +9,7 @@ GIT_COMMIT="${GIT_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=7 HEAD 2>/dev/n
 LDFLAGS="-s -w -X 'github.com/likaia/nginxpulse/internal/version.Version=${VERSION}' -X 'github.com/likaia/nginxpulse/internal/version.BuildTime=${BUILD_TIME}' -X 'github.com/likaia/nginxpulse/internal/version.GitCommit=${GIT_COMMIT}'"
 
 backend_pid=""
+backend_container=""
 frontend_pid=""
 mobile_frontend_pid=""
 pg_started_by_us=0
@@ -25,13 +26,48 @@ DB_DSN="${DB_DSN:-}"
 DEFAULT_DSN="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}?sslmode=disable"
 FORCE_SETUP_UI="${FORCE_SETUP_UI:-}"
 FORCE_EMPTY_CONFIG="${FORCE_EMPTY_CONFIG:-}"
+DOCKER_GO_IMAGE="${DOCKER_GO_IMAGE:-golang:1.24}"
+BACKEND_RUNTIME="${BACKEND_RUNTIME:-auto}"
+BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-nginxpulse-dev-backend}"
+
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
 
 ensure_cmd() {
   local cmd="$1"
-  if ! command -v "$cmd" >/dev/null 2>&1; then
+  if ! have_cmd "$cmd"; then
     echo "$cmd not found in PATH. Please install it and retry." >&2
     exit 1
   fi
+}
+
+should_use_local_go() {
+  if [[ "$BACKEND_RUNTIME" == "go" ]]; then
+    return 0
+  fi
+  if [[ "$BACKEND_RUNTIME" == "docker" ]]; then
+    return 1
+  fi
+  have_cmd go
+}
+
+ensure_backend_runtime() {
+  if should_use_local_go; then
+    return 0
+  fi
+
+  if have_cmd docker; then
+    echo "go not found in PATH, falling back to Docker backend (${DOCKER_GO_IMAGE})."
+    return 0
+  fi
+
+  cat >&2 <<'EOF'
+Neither Go nor Docker is available.
+- Install Go and re-run: pnpm run dev:local
+- Or install Docker Desktop and let dev:local run the backend in a container
+EOF
+  exit 1
 }
 
 ensure_go_deps() {
@@ -72,16 +108,16 @@ ensure_node_deps() {
     install_needed=1
   elif [[ "$dir/package.json" -nt "$dir/node_modules" ]]; then
     install_needed=1
-  elif [[ -f "$dir/package-lock.json" && "$dir/package-lock.json" -nt "$dir/node_modules" ]]; then
+  elif [[ -f "$dir/pnpm-lock.yaml" && "$dir/pnpm-lock.yaml" -nt "$dir/node_modules" ]]; then
     install_needed=1
   fi
 
   if [[ "$install_needed" -eq 1 ]]; then
     echo "Installing ${label} dependencies..."
-    if [[ -f "$dir/package-lock.json" ]]; then
-      (cd "$dir" && npm ci) || (cd "$dir" && npm install)
+    if [[ -f "$dir/pnpm-lock.yaml" ]]; then
+      (cd "$dir" && pnpm install --frozen-lockfile) || (cd "$dir" && pnpm install)
     else
-      (cd "$dir" && npm install)
+      (cd "$dir" && pnpm install)
     fi
   fi
 }
@@ -158,6 +194,21 @@ start_postgres() {
 
 start_backend() {
   echo "Starting backend on http://localhost:8089"
+  if should_use_local_go; then
+    start_backend_with_go
+  else
+    start_backend_with_docker
+  fi
+}
+
+rewrite_loopback_for_docker() {
+  local value="$1"
+  value="${value//127.0.0.1/host.docker.internal}"
+  value="${value//localhost/host.docker.internal}"
+  printf '%s' "$value"
+}
+
+start_backend_with_go() {
   if is_truthy "$FORCE_SETUP_UI" || is_truthy "$FORCE_EMPTY_CONFIG"; then
     local force_setup_ui="0"
     if is_truthy "$FORCE_SETUP_UI"; then
@@ -182,15 +233,69 @@ start_backend() {
   fi
 }
 
+start_backend_with_docker() {
+  local force_setup_ui="0"
+  local force_empty_config="0"
+  local config_json=""
+  local backend_dsn="$DB_DSN"
+  local docker_args=(
+    run --rm
+    --name "$BACKEND_CONTAINER_NAME"
+    --add-host host.docker.internal:host-gateway
+    -p 8089:8089
+    -v "$ROOT_DIR":/src
+    -w /src
+    -e SERVER_PORT=:8089
+    -e LDFLAGS="$LDFLAGS"
+  )
+
+  if is_truthy "$FORCE_SETUP_UI"; then
+    force_setup_ui="1"
+  fi
+  if is_truthy "$FORCE_EMPTY_CONFIG"; then
+    force_empty_config="1"
+  fi
+
+  if [[ -n "$backend_dsn" ]]; then
+    backend_dsn="$(rewrite_loopback_for_docker "$backend_dsn")"
+  fi
+
+  docker rm -f "$BACKEND_CONTAINER_NAME" >/dev/null 2>&1 || true
+
+  if is_truthy "$FORCE_SETUP_UI" || is_truthy "$FORCE_EMPTY_CONFIG"; then
+    docker_args+=(
+      -e FORCE_SETUP_UI="$force_setup_ui"
+      -e FORCE_EMPTY_CONFIG="$force_empty_config"
+    )
+  else
+    config_json="$(cat "$DEV_CONFIG")"
+    docker_args+=(
+      -e CONFIG_JSON="$config_json"
+      -e DB_DSN="$backend_dsn"
+    )
+  fi
+
+  docker "${docker_args[@]}" \
+    "$DOCKER_GO_IMAGE" \
+    /bin/sh -lc 'go mod download >/dev/null && exec go run -ldflags="$LDFLAGS" ./cmd/nginxpulse/main.go' &
+  backend_pid=$!
+  backend_container="$BACKEND_CONTAINER_NAME"
+  sleep 3
+  if ! docker ps --format '{{.Names}}' | grep -qx "$BACKEND_CONTAINER_NAME"; then
+    echo "Backend container failed to start. Check docker logs ${BACKEND_CONTAINER_NAME}." >&2
+    exit 1
+  fi
+}
+
 start_frontend() {
   echo "Starting frontend on http://localhost:8088"
-  (cd "$ROOT_DIR/webapp" && npm run dev) &
+  (cd "$ROOT_DIR/webapp" && pnpm run dev) &
   frontend_pid=$!
 }
 
 start_mobile_frontend() {
   echo "Starting mobile frontend on http://localhost:8087 (LAN: http://<your-ip>:8087)"
-  (cd "$ROOT_DIR/webapp_mobile" && npm run dev -- --host 0.0.0.0 --port 8087) &
+  (cd "$ROOT_DIR/webapp_mobile" && pnpm run dev -- --host 0.0.0.0 --port 8087) &
   mobile_frontend_pid=$!
 }
 
@@ -202,10 +307,13 @@ cleanup() {
     kill "$mobile_frontend_pid" >/dev/null 2>&1 || true
   fi
   if [[ -n "$backend_pid" ]]; then
-    if command -v pkill >/dev/null 2>&1; then
+    if have_cmd pkill; then
       pkill -TERM -P "$backend_pid" >/dev/null 2>&1 || true
     fi
     kill "$backend_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$backend_container" ]]; then
+    docker rm -f "$backend_container" >/dev/null 2>&1 || true
   fi
   if [[ "$pg_started_by_us" -eq 1 ]]; then
     docker stop "$PG_CONTAINER" >/dev/null 2>&1 || true
@@ -214,10 +322,12 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-ensure_cmd go
 ensure_cmd node
-ensure_cmd npm
-ensure_go_deps
+ensure_cmd pnpm
+ensure_backend_runtime
+if should_use_local_go; then
+  ensure_go_deps
+fi
 if ! is_truthy "$FORCE_SETUP_UI" && ! is_truthy "$FORCE_EMPTY_CONFIG"; then
   ensure_config
 else

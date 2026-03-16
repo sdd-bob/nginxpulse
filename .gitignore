@@ -14,9 +14,7 @@ webapp_mobile/.vite/
 appstore_pr/
 internal/webui/dist/
 internal/webui/dist_mobile/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+pnpm-debug.log*
 **/*.log
 
 tests/**/coverage/
@@ -35,5 +33,3 @@ selenium-debug.log
 # .eslintignore
 # .eslintrc.js
 # .env.*
-package-lock.json
-yarn.lock

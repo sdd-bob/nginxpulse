@@ -8,7 +8,7 @@ echo "目标平台: ${GOOS}/${GOARCH}"
 
 if [ -f "webapp/package.json" ]; then
     echo "构建前端资源..."
-    (cd webapp && npm install && npm run build) || {
+    (cd webapp && pnpm install --frozen-lockfile && pnpm run build) || {
         echo "前端构建失败!"
         exit 1
     }

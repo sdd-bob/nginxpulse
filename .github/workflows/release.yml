@@ -37,6 +37,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
+          cache-dependency-path: |
+            webapp/pnpm-lock.yaml
+            webapp_mobile/pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -46,13 +53,13 @@ jobs:
       - name: Build frontend
         run: |
           cd webapp
-          npm install
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm run build
       - name: Build mobile frontend
         run: |
           cd webapp_mobile
-          npm install
-          npm run build
+          pnpm install --frozen-lockfile
+          pnpm run build
 
       - name: Prepare embedded assets
         run: |

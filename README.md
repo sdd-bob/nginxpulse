@@ -134,16 +134,16 @@ docker compose up -d
 
 ```bash
 cd webapp
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 移动端构建（/m）：
 
 ```bash
 cd webapp_mobile
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 后端构建：

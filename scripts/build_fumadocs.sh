@@ -40,16 +40,16 @@ ensure_node_deps() {
     install_needed=1
   elif [[ "$DOCS_DIR/package.json" -nt "$DOCS_DIR/node_modules" ]]; then
     install_needed=1
-  elif [[ -f "$DOCS_DIR/package-lock.json" && "$DOCS_DIR/package-lock.json" -nt "$DOCS_DIR/node_modules" ]]; then
+  elif [[ -f "$DOCS_DIR/pnpm-lock.yaml" && "$DOCS_DIR/pnpm-lock.yaml" -nt "$DOCS_DIR/node_modules" ]]; then
     install_needed=1
   fi
 
   if [[ "$install_needed" -eq 1 ]]; then
     echo "Installing Fumadocs dependencies..."
-    if [[ -f "$DOCS_DIR/package-lock.json" ]]; then
-      (cd "$DOCS_DIR" && npm ci) || (cd "$DOCS_DIR" && npm install)
+    if [[ -f "$DOCS_DIR/pnpm-lock.yaml" ]]; then
+      (cd "$DOCS_DIR" && pnpm install --frozen-lockfile) || (cd "$DOCS_DIR" && pnpm install)
     else
-      (cd "$DOCS_DIR" && npm install)
+      (cd "$DOCS_DIR" && pnpm install)
     fi
   fi
 }
@@ -66,7 +66,7 @@ if [[ ! -d "$DOCS_DIR" ]]; then
 fi
 
 ensure_cmd node
-ensure_cmd npm
+ensure_cmd pnpm
 ensure_cmd tar
 
 if [[ "$SKIP_SYNC" != "1" && -f "$SYNC_SCRIPT" ]]; then
@@ -77,7 +77,7 @@ fi
 ensure_node_deps
 
 echo "Building static docs..."
-(cd "$DOCS_DIR" && npm run build)
+(cd "$DOCS_DIR" && pnpm run build)
 
 if [[ ! -d "$OUT_DIR" ]]; then
   echo "Build output not found: $OUT_DIR" >&2

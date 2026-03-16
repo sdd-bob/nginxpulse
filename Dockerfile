@@ -1,15 +1,18 @@
 FROM node:20-alpine AS webapp-builder
 
 WORKDIR /app
-COPY webapp/package*.json ./webapp/
-COPY webapp_mobile/package*.json ./webapp_mobile/
-RUN cd webapp && npm install
-RUN cd webapp_mobile && npm install
+RUN corepack enable
+COPY webapp/package.json ./webapp/
+COPY webapp/pnpm-lock.yaml ./webapp/
+COPY webapp_mobile/package.json ./webapp_mobile/
+COPY webapp_mobile/pnpm-lock.yaml ./webapp_mobile/
+RUN cd webapp && pnpm install --frozen-lockfile
+RUN cd webapp_mobile && pnpm install --frozen-lockfile
 
 COPY webapp ./webapp
 COPY webapp_mobile ./webapp_mobile
-RUN cd webapp && npm run build
-RUN cd webapp_mobile && npm run build
+RUN cd webapp && pnpm run build
+RUN cd webapp_mobile && pnpm run build
 
 FROM golang:1.24.0-alpine AS backend-builder
 

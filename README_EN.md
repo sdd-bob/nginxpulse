@@ -133,16 +133,16 @@ Frontend build:
 
 ```bash
 cd webapp
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 Mobile build (/m):
 
 ```bash
 cd webapp_mobile
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 Backend build:

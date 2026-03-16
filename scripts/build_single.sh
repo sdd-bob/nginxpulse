@@ -95,10 +95,10 @@ copy_support_files() {
 }
 
 echo "Building frontend..."
-(cd "$WEBAPP_DIR" && npm install && npm run build)
+(cd "$WEBAPP_DIR" && pnpm install --frozen-lockfile && pnpm run build)
 
 echo "Building mobile frontend..."
-(cd "$WEBAPP_MOBILE_DIR" && npm install && npm run build)
+(cd "$WEBAPP_MOBILE_DIR" && pnpm install --frozen-lockfile && pnpm run build)
 
 echo "Preparing embedded assets..."
 rm -rf "$WEBUI_DIST_DIR"

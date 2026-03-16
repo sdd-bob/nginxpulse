@@ -6,11 +6,11 @@ GIT_COMMIT ?= $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
 LDFLAGS = -s -w -X 'github.com/likaia/nginxpulse/internal/version.Version=$(VERSION)' -X 'github.com/likaia/nginxpulse/internal/version.BuildTime=$(BUILD_TIME)' -X 'github.com/likaia/nginxpulse/internal/version.GitCommit=$(GIT_COMMIT)'
 
 frontend:
-	cd webapp && npm install && npm run build
-	cd webapp_mobile && npm install && npm run build
+	cd webapp && pnpm install --frozen-lockfile && pnpm run build
+	cd webapp_mobile && pnpm install --frozen-lockfile && pnpm run build
 
 frontend-mobile:
-	cd webapp_mobile && npm install && npm run build
+	cd webapp_mobile && pnpm install --frozen-lockfile && pnpm run build
 
 backend:
 	go build -ldflags="$(LDFLAGS)" -o bin/nginxpulse ./cmd/nginxpulse/main.go
