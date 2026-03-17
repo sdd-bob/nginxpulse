@@ -19,12 +19,6 @@
       "domains": ["localhost"]
     },
     {
-      "name": "雷池日志",
-      "logPath": "var/log/leichi/accesslog_1",
-      "logType": "safeline",
-      "domains": ["localhost"]
-    },
-    {
       "name": "sftp站点",
       "logPath": "",
       "domains": [
