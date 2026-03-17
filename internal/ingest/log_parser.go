@@ -27,7 +27,7 @@ var (
 	defaultNginxIngressLogRegex = `^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)" (?P<request_length>\d+) (?P<request_time>[0-9.]+) \[(?P<proxy_upstream_name>[^\]]*)\] \[(?P<proxy_alternative_upstream_name>[^\]]*)\] (?P<upstream_addr>[^ ]+(?:,\s*[^ ]+)*) (?P<upstream_response_length>[^ ]+(?:,\s*[^ ]+)*) (?P<upstream_response_time>[^ ]+(?:,\s*[^ ]+)*) (?P<upstream_status>[^ ]+(?:,\s*[^ ]+)*) (?P<req_id>\S+)`
 	defaultIISW3CLogRegex       = `^(?P<time>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+\S+\s+(?P<method>\S+)\s+(?P<url>\S+)\s+(?P<query>\S+)\s+\S+\s+\S+\s+(?P<ip>\S+)\s+(?P<ua>\S+)\s+(?P<referer>\S+)\s+(?P<status>\d{3})(?:\s+\S+){3}\s*$`
 	defaultNPMLogRegex          = `^\[(?P<time>[^\]]+)\] - (?P<status>\d+) (?P<upstream_status>\d+) - (?P<method>\S+) (?P<scheme>\S+) (?P<host>\S+) "(?P<path>[^"]+)" \[Client (?P<ip>[^\]]+)\] \[Length (?P<bytes>\d+)\] \[Gzip (?P<gzip>[^\]]+)\] \[Sent-to (?P<upstream>[^\]]+)\] "(?P<ua>[^"]+)" "(?P<referer>[^"]*)"`
-	defaultSafeLineWAFLogRegex  = `^(?P<ip>\S+) - (?P<user>\S+) \[(?P<time>[^\]]+)\] "(?P<host>[^"]*)" "(?P<request>[^"]*)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<ua>[^"]*)" "(?P<http_x_forwarded_for>[^"]*)"`
+	defaultSafeLineWAFLogRegex  = `^(?P<ip>\S+)\s*(?:\|\s*|-\s+)(?P<user>\S+)\s*(?:\|\s*|\[\s*)(?P<time>[^\]|]+?)(?:\]\s+|\s*\|\s*)"(?P<host>[^"]*)"\s*(?:\|\s*|\s+)"(?P<request>[^"]*)"\s*(?:\|\s*|\s+)(?P<status>\d{3})\s*(?:\|\s*|\s+)(?P<bytes>\d+|-)\s*(?:\|\s*|\s+)"(?P<referer>[^"]*)"\s*(?:\|\s*|\s+)"(?P<ua>[^"]*)"(?:\s*(?:\|\s*|\s+)"(?P<http_x_forwarded_for>[^"]*)")?$`
 	lastCleanupDate             = ""
 	parsingMu                   sync.RWMutex
 	parsingMode                 parseMode
