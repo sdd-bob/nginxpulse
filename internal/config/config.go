@@ -108,6 +108,20 @@ type SystemConfig struct {
 	Language            string           `json:"language"`
 	WebBasePath         string           `json:"webBasePath,omitempty"`
 	MobilePWAEnabled    bool             `json:"mobilePwaEnabled"`
+	OAuth2              *OAuth2Config    `json:"oauth2,omitempty"`
+}
+
+type OAuth2Config struct {
+	Enabled        bool     `json:"enabled"`
+	ProviderName   string   `json:"providerName"` // github, google, custom
+	ClientID       string   `json:"clientID"`
+	ClientSecret   string   `json:"clientSecret"`
+	RedirectURL    string   `json:"redirectURL"`
+	Scopes         []string `json:"scopes"`
+	AuthURL        string   `json:"authURL,omitempty"`        // 自定义 provider 时使用
+	TokenURL       string   `json:"tokenURL,omitempty"`       // 自定义 provider 时使用
+	UserInfoURL    string   `json:"userInfoURL,omitempty"`    // 自定义 provider 时使用
+	SessionTimeout string   `json:"sessionTimeout,omitempty"` // 默认 24h
 }
 
 type AlertPushConfig struct {

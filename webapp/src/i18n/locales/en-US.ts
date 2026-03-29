@@ -114,6 +114,14 @@ const enUS = {
     invalid: 'Invalid access key',
     expired: 'Access key expired. Please enter it again.',
   },
+  oauth2: {
+    welcome: 'Welcome to NginxPulse',
+    subtitle: 'Sign in with one of the following methods to continue',
+    loginWith: 'Sign in with {provider}',
+    useOAuth2: 'Use OAuth2 Login',
+    useAccessKey: 'Use Access Key',
+    logout: 'Logout',
+  },
   theme: {
     toggle: 'Toggle theme',
   },

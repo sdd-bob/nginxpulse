@@ -10,30 +10,40 @@ import (
 )
 
 const (
-	envConfigJSON          = "CONFIG_JSON"
-	envWebsites            = "WEBSITES"
-	envLogDestination      = "LOG_DEST"
-	envTaskInterval        = "TASK_INTERVAL"
-	envHTTPSourceTimeout   = "HTTP_SOURCE_TIMEOUT"
-	envLogRetentionDays    = "LOG_RETENTION_DAYS"
-	envLogParseBatchSize   = "LOG_PARSE_BATCH_SIZE"
-	envServerPort          = "SERVER_PORT"
-	envPVStatusCodes       = "PV_STATUS_CODES"
-	envPVExcludePatterns   = "PV_EXCLUDE_PATTERNS"
-	envPVExcludeIPs        = "PV_EXCLUDE_IPS"
-	envDemoMode            = "DEMO_MODE"
-	envAccessKeys          = "ACCESS_KEYS"
-	envAccessKeyExpireDays = "ACCESS_KEY_EXPIRE_DAYS"
-	envLanguage            = "APP_LANGUAGE"
-	envWebBasePath         = "WEB_BASE_PATH"
-	envMobilePWAEnabled    = "MOBILE_PWA_ENABLED"
-	envIPGeoCacheLimit     = "IP_GEO_CACHE_LIMIT"
-	envIPGeoAPIURL         = "IP_GEO_API_URL"
-	envDBDriver            = "DB_DRIVER"
-	envDBDSN               = "DB_DSN"
-	envDBMaxOpenConns      = "DB_MAX_OPEN_CONNS"
-	envDBMaxIdleConns      = "DB_MAX_IDLE_CONNS"
-	envDBConnMaxLifetime   = "DB_CONN_MAX_LIFETIME"
+	envConfigJSON           = "CONFIG_JSON"
+	envWebsites             = "WEBSITES"
+	envLogDestination       = "LOG_DEST"
+	envTaskInterval         = "TASK_INTERVAL"
+	envHTTPSourceTimeout    = "HTTP_SOURCE_TIMEOUT"
+	envLogRetentionDays     = "LOG_RETENTION_DAYS"
+	envLogParseBatchSize    = "LOG_PARSE_BATCH_SIZE"
+	envServerPort           = "SERVER_PORT"
+	envPVStatusCodes        = "PV_STATUS_CODES"
+	envPVExcludePatterns    = "PV_EXCLUDE_PATTERNS"
+	envPVExcludeIPs         = "PV_EXCLUDE_IPS"
+	envDemoMode             = "DEMO_MODE"
+	envAccessKeys           = "ACCESS_KEYS"
+	envAccessKeyExpireDays  = "ACCESS_KEY_EXPIRE_DAYS"
+	envLanguage             = "APP_LANGUAGE"
+	envWebBasePath          = "WEB_BASE_PATH"
+	envMobilePWAEnabled     = "MOBILE_PWA_ENABLED"
+	envIPGeoCacheLimit      = "IP_GEO_CACHE_LIMIT"
+	envIPGeoAPIURL          = "IP_GEO_API_URL"
+	envDBDriver             = "DB_DRIVER"
+	envDBDSN                = "DB_DSN"
+	envDBMaxOpenConns       = "DB_MAX_OPEN_CONNS"
+	envDBMaxIdleConns       = "DB_MAX_IDLE_CONNS"
+	envDBConnMaxLifetime    = "DB_CONN_MAX_LIFETIME"
+	envOAuth2Enabled        = "OAUTH2_ENABLED"
+	envOAuth2ProviderName   = "OAUTH2_PROVIDER_NAME"
+	envOAuth2ClientID       = "OAUTH2_CLIENT_ID"
+	envOAuth2ClientSecret   = "OAUTH2_CLIENT_SECRET"
+	envOAuth2RedirectURL    = "OAUTH2_REDIRECT_URL"
+	envOAuth2Scopes         = "OAUTH2_SCOPES"
+	envOAuth2AuthURL        = "OAUTH2_AUTH_URL"
+	envOAuth2TokenURL       = "OAUTH2_TOKEN_URL"
+	envOAuth2UserInfoURL    = "OAUTH2_USER_INFO_URL"
+	envOAuth2SessionTimeout = "OAUTH2_SESSION_TIMEOUT"
 )
 
 var (
@@ -303,6 +313,76 @@ func applyEnvOverrides(cfg *Config) error {
 			return fmt.Errorf("解析 %s 失败: %w", key, err)
 		}
 		cfg.PVFilter.ExcludeIPs = values
+	}
+
+	// OAuth2 配置
+	if raw, _ := getEnvValue(envOAuth2Enabled); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return fmt.Errorf("解析 %s 失败：%w", envOAuth2Enabled, err)
+		}
+		cfg.System.OAuth2.Enabled = parsed
+	}
+	if raw, _ := getEnvValue(envOAuth2ProviderName); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.ProviderName = raw
+	}
+	if raw, _ := getEnvValue(envOAuth2ClientID); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.ClientID = raw
+	}
+	if raw, _ := getEnvValue(envOAuth2ClientSecret); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.ClientSecret = raw
+	}
+	if raw, _ := getEnvValue(envOAuth2RedirectURL); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.RedirectURL = raw
+	}
+	if raw, key := getEnvValue(envOAuth2Scopes); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		values, err := parseStringSliceFlexible(raw)
+		if err != nil {
+			return fmt.Errorf("解析 %s 失败：%w", key, err)
+		}
+		cfg.System.OAuth2.Scopes = values
+	}
+	if raw, _ := getEnvValue(envOAuth2AuthURL); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.AuthURL = raw
+	}
+	if raw, _ := getEnvValue(envOAuth2TokenURL); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.TokenURL = raw
+	}
+	if raw, _ := getEnvValue(envOAuth2UserInfoURL); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.UserInfoURL = raw
+	}
+	if raw, _ := getEnvValue(envOAuth2SessionTimeout); raw != "" {
+		if cfg.System.OAuth2 == nil {
+			cfg.System.OAuth2 = &OAuth2Config{}
+		}
+		cfg.System.OAuth2.SessionTimeout = raw
 	}
 
 	return nil

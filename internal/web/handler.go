@@ -58,6 +58,53 @@ func SetupRoutes(
 		if logParser != nil {
 			ipGeoPendingCount = logParser.GetIPGeoPendingCount()
 		}
+
+		// OAuth2 状态
+		oauth2Enabled := cfg.System.OAuth2 != nil && cfg.System.OAuth2.Enabled
+		oauth2Providers := []gin.H{}
+		loggedIn := false
+		userEmail := ""
+		userName := ""
+
+		if oauth2Enabled {
+			// 根据配置返回支持的提供商
+			switch cfg.System.OAuth2.ProviderName {
+			case "github":
+				oauth2Providers = append(oauth2Providers, gin.H{
+					"name":  "github",
+					"label": "GitHub",
+					"icon":  "pi pi-github",
+				})
+			case "google":
+				oauth2Providers = append(oauth2Providers, gin.H{
+					"name":  "google",
+					"label": "Google",
+					"icon":  "pi pi-google",
+				})
+			case "custom":
+				oauth2Providers = append(oauth2Providers, gin.H{
+					"name":  "custom",
+					"label": "SSO Login",
+					"icon":  "pi pi-lock",
+				})
+			default:
+				oauth2Providers = append(oauth2Providers, gin.H{
+					"name":  cfg.System.OAuth2.ProviderName,
+					"label": cfg.System.OAuth2.ProviderName,
+					"icon":  "pi pi-user",
+				})
+			}
+
+			// 检查是否已登录
+			if email, exists := c.Get("user_email"); exists {
+				loggedIn = true
+				userEmail = email.(string)
+				if name, ok := c.Get("user_name"); ok {
+					userName = name.(string)
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"log_parsing":                             ingest.IsIPParsing(),
 			"log_parsing_website_id":                  ingest.GetParsingWebsiteID(),
@@ -78,6 +125,12 @@ func SetupRoutes(
 			"migration_required":                      migrationRequired,
 			"setup_required":                          config.IsSetupMode(),
 			"config_readonly":                         config.ConfigReadOnly(),
+			"oauth2_enabled":                          oauth2Enabled,
+			"oauth2_providers":                        oauth2Providers,
+			"oauth2_only":                             false,
+			"logged_in":                               loggedIn,
+			"user_email":                              userEmail,
+			"user_name":                               userName,
 		})
 	})
 

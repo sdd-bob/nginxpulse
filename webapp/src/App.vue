@@ -92,7 +92,16 @@
         <RouterView :key="`${route.fullPath}-${currentLocale}-${accessKeyReloadToken}`" />
       </main>
 
-      <div v-if="accessKeyRequired" class="access-gate">
+      <div v-if="oauth2Required && !accessKeyRequired" class="oauth2-gate">
+        <OAuth2Login 
+          :providers="oauth2Providers"
+          :allow-access-key="true"
+          :show-access-key-form="false"
+          @toggle-access-key="toggleAccessKey"
+        />
+      </div>
+
+      <div v-else-if="accessKeyRequired" class="access-gate">
         <div class="access-card">
           <div class="access-title">{{ t('access.title') }}</div>
           <div class="access-sub">{{ t('access.subtitle') }}</div>
@@ -125,6 +134,7 @@ import { ACCESS_KEY_STORAGE, saveAccessKey, setAccessKeyExpireDays } from '@/api
 import { getLocaleFromQuery, getStoredLocale, normalizeLocale, setLocale } from '@/i18n';
 import { primevueLocales } from '@/i18n/primevue';
 import SetupPage from '@/pages/SetupPage.vue';
+import OAuth2Login from '@/components/OAuth2Login.vue';
 
 const route = useRoute();
 const primevue = usePrimeVue();
@@ -152,6 +162,8 @@ const demoMode = ref(false);
 const migrationRequired = ref(false);
 const setupRequired = ref(false);
 const appVersion = ref('');
+const oauth2Required = ref(false);
+const oauth2Providers = ref<Array<{ name: string; label: string; icon: string }>>([]);
 const accessKeyRequired = ref(false);
 const accessKeySubmitting = ref(false);
 const accessKeyInput = ref(localStorage.getItem(ACCESS_KEY_STORAGE) || '');
@@ -231,6 +243,13 @@ async function refreshAppStatus() {
     setupRequired.value = Boolean(status.setup_required);
     setAccessKeyExpireDays(status.access_key_expire_days);
     appVersion.value = status.version ?? '';
+    
+    // OAuth2 状态
+    oauth2Required.value = Boolean(status.oauth2_enabled) && !Boolean(status.logged_in);
+    if (status.oauth2_providers) {
+      oauth2Providers.value = status.oauth2_providers;
+    }
+    
     accessKeyRequired.value = false;
     accessKeyErrorKey.value = null;
     accessKeyErrorText.value = '';
@@ -248,6 +267,11 @@ async function refreshAppStatus() {
       console.error('获取系统状态失败:', error);
     }
   }
+}
+
+function toggleAccessKey() {
+  accessKeyRequired.value = !accessKeyRequired.value;
+  oauth2Required.value = !oauth2Required.value;
 }
 
 function handleAccessKeyEvent(event: Event) {

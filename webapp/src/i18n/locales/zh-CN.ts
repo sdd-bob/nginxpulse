@@ -114,6 +114,14 @@ const zhCN = {
     invalid: '访问密钥无效',
     expired: '访问密钥已过期，请重新输入',
   },
+  oauth2: {
+    welcome: '欢迎使用 NginxPulse',
+    subtitle: '使用以下方式登录以继续',
+    loginWith: '使用 {provider} 登录',
+    useOAuth2: '使用 OAuth2 登录',
+    useAccessKey: '使用访问密钥登录',
+    logout: '退出登录',
+  },
   theme: {
     toggle: '切换主题',
   },

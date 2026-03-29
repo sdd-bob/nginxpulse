@@ -1,0 +1,50 @@
+{
+  "system": {
+    "oauth2": {
+      "enabled": true,
+      "providerName": "github",
+      "clientID": "your-github-client-id",
+      "clientSecret": "your-github-client-secret",
+      "redirectURL": "http://localhost:8088/auth/callback",
+      "scopes": ["read:user", "user:email"],
+      "sessionTimeout": "24h"
+    },
+    "logDestination": "file",
+    "taskInterval": "1m",
+    "logRetentionDays": 30,
+    "parseBatchSize": 100,
+    "ipGeoCacheLimit": 1000000,
+    "ipGeoApiUrl": "http://ip-api.com/batch",
+    "demoMode": false,
+    "accessKeys": [],
+    "accessKeyExpireDays": 7,
+    "language": "zh-CN",
+    "mobilePwaEnabled": false
+  },
+  "server": {
+    "Port": ":8088"
+  },
+  "database": {
+    "driver": "postgres",
+    "dsn": "postgres://user:password@localhost:5432/nginxpulse?sslmode=disable",
+    "maxOpenConns": 10,
+    "maxIdleConns": 5,
+    "connMaxLifetime": "30m"
+  },
+  "websites": [
+    {
+      "name": "示例网站",
+      "logPath": "/share/logs/access.log",
+      "domains": ["example.com"]
+    }
+  ],
+  "pvFilter": {
+    "statusCodeInclude": [200],
+    "excludePatterns": [
+      "favicon.ico$",
+      "robots.txt$",
+      "\\.(?:js|css|jpg|jpeg|png|gif|svg|webp|woff|woff2|ttf|eot|ico)$"
+    ],
+    "excludeIPs": []
+  }
+}

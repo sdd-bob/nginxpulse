@@ -9,6 +9,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/likaia/nginxpulse/internal/analytics"
+	"github.com/likaia/nginxpulse/internal/config"
 	"github.com/likaia/nginxpulse/internal/ingest"
 	"github.com/likaia/nginxpulse/internal/web"
 	"github.com/sirupsen/logrus"
@@ -38,6 +39,8 @@ func StartHTTPServer(statsFactory *analytics.StatsFactory, logParser *ingest.Log
 }
 
 func buildRouter(statsFactory *analytics.StatsFactory, logParser *ingest.LogParser) *gin.Engine {
+	cfg := config.ReadConfig()
+
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 
@@ -51,7 +54,21 @@ func buildRouter(statsFactory *analytics.StatsFactory, logParser *ingest.LogPars
 		AllowCredentials: true,
 	}))
 	router.Use(basePathMiddleware(router))
-	router.Use(accessKeyMiddleware())
+
+	// 认证中间件：OAuth2 优先，否则使用 Access Key
+	oauth2Enabled := cfg.System.OAuth2 != nil && cfg.System.OAuth2.Enabled
+	if oauth2Enabled {
+		setupOAuth2(cfg.System.OAuth2) // 初始化 OAuth2 配置
+		router.Use(oauth2Middleware())
+
+		// 注册 OAuth2 路由
+		router.GET("/auth/login", handleOAuth2Login)
+		router.GET("/auth/callback", handleOAuth2Callback)
+		router.POST("/auth/logout", handleLogout)
+		router.GET("/auth/status", handleAuthStatus)
+	} else {
+		router.Use(accessKeyMiddleware())
+	}
 
 	router.GET("/healthz", gin.WrapF(HealthHandler))
 

@@ -88,13 +88,24 @@ client.interceptors.response.use(
     const status = error?.response?.status;
     const fallback = i18n.global.t('common.requestFailed');
     const message = error?.response?.data?.error || error?.message || fallback;
+    
     if (status === 401) {
-      window.dispatchEvent(
-        new CustomEvent(ACCESS_KEY_EVENT, {
-          detail: { message },
-        })
-      );
+      // 检查是否是 OAuth2 模式（通过响应中的 login_url 判断）
+      const loginUrl = error?.response?.data?.login_url;
+      
+      if (loginUrl) {
+        // OAuth2 模式，重定向到登录页
+        window.location.href = getWebBasePathWithSlash();
+      } else {
+        // Access Key 模式，触发密钥输入
+        window.dispatchEvent(
+          new CustomEvent(ACCESS_KEY_EVENT, {
+            detail: { message },
+          })
+        );
+      }
     }
+    
     return Promise.reject(new Error(message));
   }
 );
